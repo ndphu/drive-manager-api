@@ -179,5 +179,16 @@ func AccountController(r *gin.RouterGroup) error {
 
 		c.JSON(200, account)
 	})
+
+	r.GET("/:id/key", func(c *gin.Context) {
+		account, err := accountService.FindAccount(c.Param("id"))
+		if err != nil {
+			ServerError("Fail to get account", err, c)
+			return
+		}
+		key := []byte(account.Key)
+		c.String(200, base64.StdEncoding.EncodeToString(key))
+	})
+
 	return nil
 }
