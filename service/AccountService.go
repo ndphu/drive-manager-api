@@ -37,7 +37,7 @@ func (s *AccountService) FindAccounts(page int, size int) ([]*entity.DriveAccoun
 	var list []*entity.DriveAccount
 	err := dao.Collection("drive_account").
 		Find(bson.M{}).
-		Select(bson.M{"key": 0}).
+		//Select(bson.M{"key": 0}).
 		Skip((page - 1) * size).
 		Limit(size).
 		All(&list)

@@ -25,6 +25,7 @@ func main() {
 	})
 
 	controller.AccountController(api.Group("/manage/driveAccount"))
+	controller.SearchController(api.Group("/search"))
 
 	fmt.Println("Starting server")
 	r.Run()
