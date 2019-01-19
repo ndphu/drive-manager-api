@@ -58,7 +58,7 @@ func AccountController(r *gin.RouterGroup) error {
 	r.GET("", func(c *gin.Context) {
 		page := utils.GetIntQuery(c, "page", 1)
 		size := utils.GetIntQuery(c, "size", 10)
-		accList, err := accountService.FindAccounts(page, size)
+		accList, hasMore, err := accountService.FindAccounts(page, size,false)
 		if err != nil {
 			ServerError("Fail to get account list", err, c)
 			return
@@ -69,9 +69,9 @@ func AccountController(r *gin.RouterGroup) error {
 
 		c.JSON(200, gin.H{
 			"accounts": accList,
-			"total": accountService.GetAccountCount(),
-			"page": page,
-			"size": size,
+			"hasMore":  hasMore,
+			"page":     page,
+			"size":     size,
 		})
 	})
 

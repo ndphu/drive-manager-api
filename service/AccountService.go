@@ -33,15 +33,20 @@ func (s *AccountService) FindAll() ([]*entity.DriveAccount, error) {
 	return list, err
 }
 
-func (s *AccountService) FindAccounts(page int, size int) ([]*entity.DriveAccount, error) {
+func (s *AccountService) FindAccounts(page int, size int, includeKey bool) ([]*entity.DriveAccount, bool, error) {
 	var list []*entity.DriveAccount
 	err := dao.Collection("drive_account").
 		Find(bson.M{}).
-		//Select(bson.M{"key": 0}).
+		Select(bson.M{"key": includeKey}).
 		Skip((page - 1) * size).
-		Limit(size).
+		Limit(size + 1).
 		All(&list)
-	return list, err
+	hasMore := false
+	if len(list) == size+1 {
+		hasMore = true
+		list = list[:len(list)-1]
+	}
+	return list, hasMore, err
 }
 
 func (s *AccountService) FindAccount(id string) (*entity.DriveAccount, error) {
