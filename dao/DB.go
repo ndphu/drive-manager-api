@@ -1,9 +1,11 @@
 package dao
 
 import (
-	"fmt"
+	"crypto/tls"
 	"github.com/globalsign/mgo"
 	"github.com/ndphu/drive-manager-api/config"
+	"log"
+	"net"
 )
 
 type DAO struct {
@@ -17,26 +19,30 @@ var (
 
 func init()  {
 	conf := config.Get()
-	ses, err := mgo.Dial(conf.MongoDBUri)
+
+	tlsConfig := &tls.Config{}
+	dialInfo, err:= mgo.ParseURL(conf.MongoDBUri)
 	if err != nil {
-		fmt.Println("fail to connect to database")
 		panic(err)
-	} else {
-		fmt.Println("database connected!")
 	}
+	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
+		return conn, err
+	}
+	session, err := mgo.DialWithInfo(dialInfo)
 
 	dbName := ""
 
 	if conf.DBName == "" {
-		dbs, err := ses.DatabaseNames()
+		dbs, err := session.DatabaseNames()
 		if err != nil {
-			fmt.Println("fail to connect to database")
+			log.Println("fail to connect to database")
 			panic(err)
 		} else {
 			if len(dbs) == 0 {
-				fmt.Println("no database found")
+				log.Println("no database found")
 			} else {
-				fmt.Println("found databases " + dbs[0])
+				log.Println("found databases " + dbs[0])
 			}
 			dbName = dbs[0]
 		}
@@ -45,7 +51,7 @@ func init()  {
 	}
 
 	dao = &DAO{
-		Session: ses,
+		Session: session,
 		DBName:  dbName,
 	}
 }

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -33,7 +33,7 @@ func init() {
 		conf.DBName = getDBName(conf.MongoDBUri)
 	} else {
 		conf.DBName = os.Getenv("MONGODB_DB_NAME")
-		fmt.Println("using database", conf.DBName)
+		log.Println("using database", conf.DBName)
 	}
 
 	conf.GinDebug = os.Getenv("GIN_DEBUG") == "true"

@@ -19,14 +19,12 @@ func main() {
 	r.Use(cors.New(c))
 
 	api := r.Group("/api")
-
-	api.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "OK"})
-	})
-
 	controller.AccountController(api.Group("/manage/driveAccount"))
 	controller.SearchController(api.Group("/search"))
 
 	fmt.Println("Starting server")
+	api.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "OK"})
+	})
 	r.Run()
 }
