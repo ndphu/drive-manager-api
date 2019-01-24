@@ -7,6 +7,7 @@ import (
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	driveApi "github.com/ndphu/google-api-helper"
+	"google.golang.org/api/drive/v3"
 	"sync"
 	"time"
 )
@@ -106,28 +107,28 @@ type FileLookup struct {
 	Account []entity.DriveAccount `json:"account" bson:"account"`
 }
 
-func (s *AccountService) GetDownloadLinkByFileId(fileId string) (string, error) {
+func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, string, error) {
 	file := entity.DriveFile{}
 	err := dao.Collection("file").FindId(bson.ObjectIdHex(fileId)).One(&file)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	driveService := s.accountCache[file.DriveAccount.Hex()]
-	link, err := driveService.GetDownloadLink(file.DriveFileId)
+	gFile, link, err := driveService.GetDownloadLink(file.DriveFileId)
 	if err != nil {
 		fmt.Println("fail to get download link", err.Error())
-		return "", err
+		return  nil, "", err
 	}
-	return link, nil
+	return gFile, link, nil
 }
-func (s *AccountService) GetDownloadLink(file *entity.DriveFile) (string, error) {
+func (s *AccountService) GetDownloadLink(file *entity.DriveFile) (*drive.File, string, error) {
 	driveService := s.accountCache[file.DriveAccount.Hex()]
-	link, err := driveService.GetDownloadLink(file.DriveFileId)
+	gFile, link, err := driveService.GetDownloadLink(file.DriveFileId)
 	if err != nil {
 		fmt.Println("fail to get download link", err.Error())
-		return "", err
+		return nil, "", err
 	}
-	return link, nil
+	return gFile, link, nil
 }
 func (s *AccountService) UpdateAllAccountQuota() error {
 	fmt.Println("Updating account quota...")

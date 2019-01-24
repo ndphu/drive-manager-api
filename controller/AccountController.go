@@ -155,12 +155,31 @@ func AccountController(r *gin.RouterGroup) error {
 			ServerError("Fail to initialize drive service", err, c)
 			return
 		}
-		link, err := driveService.GetDownloadLink(c.Param("fileId"))
+		driveFile, link, err := driveService.GetDownloadLink(c.Param("fileId"))
 		if err != nil {
 			ServerError("Fail to get download link", err, c)
 			return
 		}
-		c.JSON(200, gin.H{"link": link})
+		c.JSON(200, gin.H{"file": driveFile, "link": link})
+	})
+
+	r.GET("/:id/file/:fileId/sharableLink", func(c *gin.Context) {
+		acc, err := accountService.FindAccount(c.Param("id"))
+		if err != nil {
+			ServerError("Fail to get account", err, c)
+			return
+		}
+		driveService, err := helper.GetDriveService([]byte(acc.Key))
+		if err != nil {
+			ServerError("Fail to initialize drive service", err, c)
+			return
+		}
+		driveFile, link, err := driveService.GetSharableLink(c.Param("fileId"))
+		if err != nil {
+			ServerError("Fail to get download link", err, c)
+			return
+		}
+		c.JSON(200, gin.H{"file": driveFile,"link": link})
 	})
 
 	r.GET("/:id/refreshQuota", func(c *gin.Context) {
