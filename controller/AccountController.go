@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/middleware"
 	"github.com/ndphu/drive-manager-api/service"
 	"github.com/ndphu/drive-manager-api/utils"
 	helper "github.com/ndphu/google-api-helper"
@@ -15,7 +16,7 @@ func AccountController(r *gin.RouterGroup) error {
 	if err != nil {
 		return err
 	}
-
+	r.Use(middleware.FirebaseAuthMiddleware())
 	r.POST("", func(c *gin.Context) {
 		da := entity.DriveAccount{}
 		err := c.BindJSON(&da)
@@ -58,7 +59,9 @@ func AccountController(r *gin.RouterGroup) error {
 	r.GET("", func(c *gin.Context) {
 		page := utils.GetIntQuery(c, "page", 1)
 		size := utils.GetIntQuery(c, "size", 10)
-		accList, hasMore, err := accountService.FindAccounts(page, size,false)
+		val, _ := c.Get("user")
+		user := val.(*entity.User)
+		accList, hasMore, err := accountService.FindAccounts(page, size,false, user.Id.Hex())
 		if err != nil {
 			ServerError("Fail to get account list", err, c)
 			return

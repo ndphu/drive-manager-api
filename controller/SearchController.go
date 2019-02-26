@@ -5,10 +5,12 @@ import (
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/middleware"
 	"sync"
 )
 
 func SearchController(r *gin.RouterGroup) error {
+	r.Use(middleware.FirebaseAuthMiddleware())
 	r.GET("quickSearch", func(c *gin.Context) {
 		query := c.Query("query")
 		files := make([]entity.DriveFile, 0)
