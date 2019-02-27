@@ -183,7 +183,6 @@ func UserController(r *gin.RouterGroup) {
 				return
 			}
 
-			accountService.UpdateAccountCacheByOwner(user.Id)
 			accountService.UpdateAccountQuotaByOwner(user.Id)
 
 			c.JSON(200, account)

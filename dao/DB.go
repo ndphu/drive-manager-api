@@ -19,17 +19,27 @@ var (
 
 func init()  {
 	conf := config.Get()
+	var session *mgo.Session
+	var err error
 
-	tlsConfig := &tls.Config{}
-	dialInfo, err:= mgo.ParseURL(conf.MongoDBUri)
+	if conf.MongoDBUri == "" {
+		session, err = mgo.Dial(conf.MongoDBUri)
+	} else {
+		tlsConfig := &tls.Config{}
+		dialInfo, err:= mgo.ParseURL(conf.MongoDBUri)
+		if err != nil {
+			panic(err)
+		}
+		dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+			conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
+			return conn, err
+		}
+		session, err = mgo.DialWithInfo(dialInfo)
+	}
+
 	if err != nil {
 		panic(err)
 	}
-	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-		return conn, err
-	}
-	session, err := mgo.DialWithInfo(dialInfo)
 
 	dbName := ""
 

@@ -61,7 +61,7 @@ func AccountController(r *gin.RouterGroup) error {
 		size := utils.GetIntQuery(c, "size", 10)
 		val, _ := c.Get("user")
 		user := val.(*entity.User)
-		accList, hasMore, err := accountService.FindAccounts(page, size,false, user.Id.Hex())
+		accList, hasMore, err := accountService.FindAccounts(page, size, false, user.Id.Hex())
 		if err != nil {
 			ServerError("Fail to get account list", err, c)
 			return
@@ -182,24 +182,23 @@ func AccountController(r *gin.RouterGroup) error {
 			ServerError("Fail to get download link", err, c)
 			return
 		}
-		c.JSON(200, gin.H{"file": driveFile,"link": link})
+		c.JSON(200, gin.H{"file": driveFile, "link": link})
 	})
 
 	r.GET("/:id/refreshQuota", func(c *gin.Context) {
-		err := accountService.UpdateCachedQuota(c.Param("id"))
+		driveAccount, err := accountService.FindAccount(c.Param("id"))
 		if err != nil {
+			ServerError("Fail to find account", err, c)
+			return
+		}
+		if err := accountService.UpdateCachedQuota(driveAccount); err != nil {
 			ServerError("Fail to get account", err, c)
 			return
 		}
 
-		account, err := accountService.FindAccount(c.Param("id"))
-		if err != nil {
-			ServerError("Fail to get account", err, c)
-			return
-		}
-		account.Key = ""
+		driveAccount.Key = ""
 
-		c.JSON(200, account)
+		c.JSON(200, driveAccount)
 	})
 
 	r.GET("/:id/key", func(c *gin.Context) {

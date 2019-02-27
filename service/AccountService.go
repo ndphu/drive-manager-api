@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
@@ -179,7 +178,6 @@ func getDriveService(driveId bson.ObjectId) (*driveApi.DriveService, error) {
 //	return gFile, link, nil
 //}
 
-
 func (s *AccountService) UpdateAllAccountQuota() error {
 	fmt.Println("Updating account quota...")
 	all, err := s.FindAll()
@@ -209,18 +207,12 @@ func (s *AccountService) UpdateAccountQuotaByOwner(owner bson.ObjectId) error {
 		log.Println("fail to query all account")
 		return err
 	}
-	wg := sync.WaitGroup{}
 	for _, acc := range all {
-		wg.Add(1)
-		go func(id string, name string) {
-			err := s.UpdateCachedQuota(id)
-			if err != nil {
-				fmt.Println("fail to update quota for", id, name, "error", err.Error())
-			}
-			wg.Done()
-		}(acc.Id.Hex(), acc.Name)
+		err := s.UpdateCachedQuota(acc)
+		if err != nil {
+			fmt.Println("fail to update quota for", acc.Id.Hex(), acc.Name, "error", err.Error())
+		}
 	}
-	wg.Wait()
 	fmt.Println("finished update account quota")
 	return nil
 }
@@ -233,27 +225,6 @@ func GetAccountService() (*AccountService, error) {
 		}
 	}
 	return accountService, nil
-}
-
-
-func (s *AccountService) UpdateAccountCacheByOwner(owner bson.ObjectId) error {
-	var list []*entity.DriveAccount
-	err := dao.Collection("drive_account").Find(bson.M{"owner": owner}).All(&list)
-	if err != nil {
-		return err
-	}
-	for _, acc := range list {
-		if len(acc.Key) == 0 {
-			continue
-		}
-		driveService, err := driveApi.GetDriveService([]byte(acc.Key))
-		if err != nil {
-			return err
-		}
-		accountService.accountCache[acc.Id.Hex()] = driveService
-	}
-	fmt.Println("cached", len(accountService.accountCache), "accounts")
-	return nil
 }
 
 func (s *AccountService) GetAccountCount() int {

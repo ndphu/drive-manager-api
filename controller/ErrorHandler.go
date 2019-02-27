@@ -13,6 +13,7 @@ func BadRequest(msg string, err error, c *gin.Context) {
 		"msg":  msg,
 	})
 	c.Abort()
+	log.Printf("Bad Request: %s %v\n", msg, err)
 }
 
 func ServerError(msg string, err error, c *gin.Context) {
@@ -23,5 +24,5 @@ func ServerError(msg string, err error, c *gin.Context) {
 		"msg":  msg,
 	})
 	c.Abort()
-	//log.Fatalf("Internal Server Error: %s %v", msg, err)
+	log.Printf("Internal Server Error: %s %v\n", msg, err)
 }
