@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
@@ -12,6 +11,8 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/serviceusage/v1"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"time"
@@ -71,14 +72,26 @@ func ProjectController(r *gin.RouterGroup) {
 
 	r.POST("", func(c *gin.Context) {
 		user := CurrentUser(c)
-		pcrq := ProjectCreateRequest{}
-		if err := c.ShouldBindJSON(&pcrq); err != nil {
-			BadRequest("fail to parse creation request", err, c)
+		displayName := c.Request.FormValue("displayName")
+		file, _, err := c.Request.FormFile("file")
+		if err != nil {
+			BadRequest("Bad Request", err, c)
 			return
 		}
-		key, err := base64.StdEncoding.DecodeString(pcrq.Key)
+
+		//pcrq := ProjectCreateRequest{}
+		//if err := c.ShouldBindJSON(&pcrq); err != nil {
+		//	BadRequest("fail to parse creation request", err, c)
+		//	return
+		//}
+		//key, err := base64.StdEncoding.DecodeString(pcrq.Key)
+		//if err != nil {
+		//	BadRequest("fail to account key from base64", err, c)
+		//	return
+		//}
+		key, err := ioutil.ReadAll(file)
 		if err != nil {
-			BadRequest("fail to account key from base64", err, c)
+			BadRequest("Bad Request", err, c)
 			return
 		}
 
@@ -87,10 +100,46 @@ func ProjectController(r *gin.RouterGroup) {
 			BadRequest("fail to account key from base64", err, c)
 			return
 		}
+
+		config, err := google.JWTConfigFromJSON(key, serviceusage.CloudPlatformScope)
+		if err != nil {
+			ServerError("Google Service Error", err, c)
+			return
+		}
+		client := config.Client(oauth2.NoContext)
+		srv, err := serviceusage.New(client)
+
+		stateResp, err := srv.Services.
+			List("projects/" + kd.ProjectId).
+			Filter("state:ENABLED").Do()
+		if err != nil {
+			ServerError("Auto Configure Failed" , err, c)
+			return
+		}
+
+		enabledServices := make(map[string]bool)
+		for _,s  := range stateResp.Services {
+			enabledServices[s.Name] = true
+		}
+
+		for _, name := range []string{"iam.googleapis.com", "drive.googleapis.com"} {
+			if enabledServices[name] {
+				log.Println("service", name, "is already enabled")
+				continue
+			}
+			log.Println("enabled service", name, "...")
+			_, err := srv.Services.Enable("projects/" + kd.ProjectId + "/services/" + name,
+				&serviceusage.EnableServiceRequest{}).Do()
+			if err != nil {
+				ServerError("Auto Configure Failed" , err, c)
+				return
+			}
+		}
+
 		prj := entity.Project{
 			Id:          bson.NewObjectId(),
 			Owner:       user.Id,
-			DisplayName: pcrq.DisplayName,
+			DisplayName: displayName,
 			AdminKey:    string(key),
 			ProjectId:   kd.ProjectId,
 		}
@@ -100,7 +149,7 @@ func ProjectController(r *gin.RouterGroup) {
 		}
 		c.JSON(200, prj)
 	})
-
+	
 	r.POST("/:id/addServiceAccount", func(c *gin.Context) {
 		user := CurrentUser(c)
 		project := entity.Project{}
@@ -153,4 +202,5 @@ func ProjectController(r *gin.RouterGroup) {
 
 		c.JSON(200, account)
 	})
+
 }

@@ -211,5 +211,33 @@ func AccountController(r *gin.RouterGroup) error {
 		c.String(200, base64.StdEncoding.EncodeToString(key))
 	})
 
+	r.POST("/:id/upload", func(c *gin.Context) {
+		user := CurrentUser(c)
+		account, err := accountService.FindAccount(c.Param("id"))
+		if err != nil || account.Owner.Hex() != user.Id.Hex() {
+			ServerError("Account not found", err, c)
+			return
+		}
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			ServerError("Cannot read uploaded file", err, c)
+			return
+		}
+
+		srv, err := helper.GetDriveService([]byte(account.Key))
+		if err != nil {
+			ServerError("Fail to load drive account", err, c)
+			return
+		}
+
+		uploadedFile, err := srv.UploadFileFromStream(header.Filename, header.Filename, "", file)
+		if err != nil {
+			ServerError("Fail to upload", err, c)
+			return
+		}
+
+		c.JSON(200, uploadedFile)
+	})
+
 	return nil
 }
