@@ -7,5 +7,4 @@ type Project struct {
 	DisplayName string        `json:"displayName" bson:"displayName"`
 	Owner       bson.ObjectId `json:"owner" bson:"owner"`
 	ProjectId   string        `json:"projectId" bson:"projectId"`
-	AdminKey    string        `json:"adminKey" bson:"adminKey"`
 }

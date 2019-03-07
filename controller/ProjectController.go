@@ -79,16 +79,6 @@ func ProjectController(r *gin.RouterGroup) {
 			return
 		}
 
-		//pcrq := ProjectCreateRequest{}
-		//if err := c.ShouldBindJSON(&pcrq); err != nil {
-		//	BadRequest("fail to parse creation request", err, c)
-		//	return
-		//}
-		//key, err := base64.StdEncoding.DecodeString(pcrq.Key)
-		//if err != nil {
-		//	BadRequest("fail to account key from base64", err, c)
-		//	return
-		//}
 		key, err := ioutil.ReadAll(file)
 		if err != nil {
 			BadRequest("Bad Request", err, c)
@@ -113,12 +103,12 @@ func ProjectController(r *gin.RouterGroup) {
 			List("projects/" + kd.ProjectId).
 			Filter("state:ENABLED").Do()
 		if err != nil {
-			ServerError("Auto Configure Failed" , err, c)
+			ServerError("Auto Configure Failed", err, c)
 			return
 		}
 
 		enabledServices := make(map[string]bool)
-		for _,s  := range stateResp.Services {
+		for _, s := range stateResp.Services {
 			enabledServices[s.Name] = true
 		}
 
@@ -128,10 +118,10 @@ func ProjectController(r *gin.RouterGroup) {
 				continue
 			}
 			log.Println("enabled service", name, "...")
-			_, err := srv.Services.Enable("projects/" + kd.ProjectId + "/services/" + name,
+			_, err := srv.Services.Enable("projects/"+kd.ProjectId+"/services/"+name,
 				&serviceusage.EnableServiceRequest{}).Do()
 			if err != nil {
-				ServerError("Auto Configure Failed" , err, c)
+				ServerError("Auto Configure Failed", err, c)
 				return
 			}
 		}
@@ -149,14 +139,15 @@ func ProjectController(r *gin.RouterGroup) {
 		}
 		c.JSON(200, prj)
 	})
-	
+
 	r.POST("/:id/addServiceAccount", func(c *gin.Context) {
 		user := CurrentUser(c)
 		project := entity.Project{}
-		if err := dao.Collection("project").Find(bson.M{
-			"_id":   bson.ObjectIdHex(c.Param("id")),
-			"owner": user.Id,
-		}).
+		if err := dao.Collection("drive_account").
+			Find(bson.M{
+				"_id":   bson.ObjectIdHex(c.Param("id")),
+				"owner": user.Id,
+			}).
 			One(&project); err != nil {
 			ServerError("Account not found", err, c)
 			return
