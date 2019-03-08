@@ -27,8 +27,9 @@ func main() {
 	controller.SearchController(api.Group("/search"))
 	controller.UserController(api.Group("/user"))
 	controller.ProjectController(api.Group("/project"))
+	controller.AdminController(api.Group("/admin"))
 
-	updateProjects()
+	//updateProjects()
 
 	fmt.Println("Starting server")
 	api.GET("/health", func(c *gin.Context) {

@@ -73,3 +73,7 @@ func Collection(name string) *mgo.Collection {
 func GetSession() *mgo.Session {
 	return dao.Session
 }
+
+func GetDB() *mgo.Database {
+	return dao.Session.DB(dao.DBName)
+}

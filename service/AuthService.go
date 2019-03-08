@@ -94,10 +94,10 @@ func (s *AuthService) CreateUserWithEmail(email string, password string, display
 
 	log.Printf("successfully created user: %s\n", u.Email)
 	user := entity.User{
-		Id:    bson.NewObjectId(),
+		Id:          bson.NewObjectId(),
 		DisplayName: displayName,
-		Email: u.Email,
-		Roles: []string{"user"},
+		Email:       u.Email,
+		Roles:       []string{"user"},
 	}
 	dao.Collection("user").Insert(&user)
 	return &user, err
@@ -111,9 +111,12 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		return nil, "", err
 	}
 	user := entity.User{}
-	err = dao.Collection("user").Find(bson.M{
-		"email": token.Claims["email"].(string),
-	}).One(&user)
+	err = dao.Collection("user").
+		Find(
+			bson.M{
+				"email": token.Claims["email"].(string),
+			}).
+		One(&user)
 
 	if err != nil {
 		return nil, "", err
@@ -125,6 +128,7 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		"exp":        now.AddDate(0, 0, 1).Unix(),
 		"user_id":    user.Id.Hex(),
 		"user_email": user.Email,
+		"roles":      user.Roles,
 		"provider":   "Firebase",
 		"type":       "login_token",
 	})
