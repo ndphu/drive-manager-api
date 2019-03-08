@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/drive-manager-api/entity"
+	"log"
 )
 
 func AdminFilter() gin.HandlerFunc {
@@ -21,6 +22,7 @@ func AdminFilter() gin.HandlerFunc {
 }
 
 func IsAdmin(user *entity.User) bool {
+	log.Println("checking user roles", user.Roles)
 	for _, role := range user.Roles {
 		if role == "admin" {
 			return true

@@ -63,9 +63,16 @@ func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 		return []byte(os.Getenv("TOKEN_SECRET")), nil
 	})
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		iRoles := claims["roles"].([]interface{})
+		roles := make([]string, len(iRoles))
+		for i, role := range iRoles {
+			roles[i] = role.(string)
+		}
+
 		return &entity.User{
 			Id:    bson.ObjectIdHex(claims["user_id"].(string)),
 			Email: claims["user_email"].(string),
+			Roles: roles,
 		}, nil
 	} else {
 		log.Println("fail to parse token")
