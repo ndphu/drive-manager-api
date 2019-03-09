@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/base64"
 	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/middleware"
 	"github.com/ndphu/drive-manager-api/service"
@@ -237,6 +238,20 @@ func AccountController(r *gin.RouterGroup) error {
 		}
 
 		c.JSON(200, uploadedFile)
+	})
+
+	r.GET("/:id/accessToken", func(c *gin.Context) {
+		account, err := accountService.FindAccountById(bson.ObjectIdHex(c.Param("id")), CurrentUser(c).Id)
+		if err != nil {
+			ServerError("Fail to get account", err, c)
+			return
+		}
+		token, err := accountService.GetAccessToken(account)
+		if err != nil {
+			ServerError("Fail to get access token", err, c)
+			return
+		}
+		c.JSON(200, gin.H{"accessToken": token})
 	})
 
 	return nil

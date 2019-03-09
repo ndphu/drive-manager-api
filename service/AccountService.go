@@ -63,6 +63,15 @@ func (s *AccountService) FindAccount(id string) (*entity.DriveAccount, error) {
 	return &acc, err
 }
 
+func (s *AccountService) FindAccountById(id bson.ObjectId, owner bson.ObjectId) (*entity.DriveAccount, error) {
+	var acc entity.DriveAccount
+	err := dao.Collection("drive_account").Find(bson.M{
+		"_id": id,
+		"owner": owner,
+	}).One(&acc)
+	return &acc, err
+}
+
 func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) (error) {
 	var kd KeyDetails
 	err := json.Unmarshal(key, &kd)
@@ -230,4 +239,11 @@ func GetAccountService() (*AccountService, error) {
 func (s *AccountService) GetAccountCount() int {
 	n, _ := dao.Collection("drive_account").Count()
 	return n
+}
+func (s *AccountService) GetAccessToken(acc *entity.DriveAccount) (string, error) {
+	srv, err := driveApi.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		return "", err
+	}
+	return srv.GetAccessToken()
 }

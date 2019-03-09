@@ -63,9 +63,9 @@ func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 		return []byte(os.Getenv("TOKEN_SECRET")), nil
 	})
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		iRoles := claims["roles"].([]interface{})
-		roles := make([]string, len(iRoles))
-		for i, role := range iRoles {
+		_roles := claims["roles"].([]interface{})
+		roles := make([]string, len(_roles))
+		for i, role := range _roles {
 			roles[i] = role.(string)
 		}
 
