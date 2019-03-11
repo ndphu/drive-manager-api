@@ -159,7 +159,9 @@ func AccountController(r *gin.RouterGroup) error {
 			ServerError("Fail to initialize drive service", err, c)
 			return
 		}
-		driveFile, link, err := driveService.GetDownloadLink(c.Param("fileId"))
+		//driveFile, link, err := driveService.GetDownloadLink(c.Param("fileId"))
+
+		driveFile, link, err := driveService.GetDownloadLink2(c.Param("fileId"))
 		if err != nil {
 			ServerError("Fail to get download link", err, c)
 			return
