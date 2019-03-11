@@ -86,7 +86,7 @@ func AccountController(r *gin.RouterGroup) error {
 			return
 		}
 		c.JSON(200, gin.H{
-			"_id":   acc.Id,
+			"id":   acc.Id,
 			"name":  acc.Name,
 			"desc":  acc.Desc,
 			"limit": acc.Limit,
@@ -161,7 +161,7 @@ func AccountController(r *gin.RouterGroup) error {
 		}
 		//driveFile, link, err := driveService.GetDownloadLink(c.Param("fileId"))
 
-		driveFile, link, err := driveService.GetDownloadLink2(c.Param("fileId"))
+		driveFile, link, err := driveService.GetDownloadLink(c.Param("fileId"))
 		if err != nil {
 			ServerError("Fail to get download link", err, c)
 			return
