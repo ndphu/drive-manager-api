@@ -136,7 +136,7 @@ type FileAggregateResult struct {
 	AccountKey string        `json:"accountKey" bson:"accountKey"`
 }
 
-func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, string, error) {
+func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *driveApi.DownloadDetails, error) {
 	res := FileAggregateResult{}
 	if err := dao.Collection("file").Pipe([]bson.M{
 		{"$match": bson.M{"_id": bson.ObjectIdHex(fileId)}},
@@ -153,16 +153,16 @@ func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, st
 			"accountKey": "$account.key",
 		}},
 	}).One(&res); err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	srv, err := driveApi.GetDriveService([]byte(res.AccountKey))
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	gFile, link, err := srv.GetDownloadLink(res.DriveId)
 	if err != nil {
 		fmt.Println("fail to get download link", err.Error())
-		return nil, "", err
+		return nil, nil, err
 	}
 	return gFile, link, nil
 }

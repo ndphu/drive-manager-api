@@ -19,7 +19,7 @@ func SearchController(r *gin.RouterGroup) error {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			dao.Collection("file_entry").Find(bson.M{
+			dao.Collection("file").Find(bson.M{
 				"name": bson.RegEx{Pattern: query, Options: "i"},
 			}).Limit(20).All(&files)
 		}()

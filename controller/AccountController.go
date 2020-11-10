@@ -2,6 +2,8 @@ package controller
 
 import (
 	"encoding/base64"
+	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/entity"
@@ -9,7 +11,9 @@ import (
 	"github.com/ndphu/drive-manager-api/service"
 	"github.com/ndphu/drive-manager-api/utils"
 	helper "github.com/ndphu/google-api-helper"
+	"net/http"
 	"strconv"
+	"strings"
 )
 
 func AccountController(r *gin.RouterGroup) error {
@@ -166,7 +170,8 @@ func AccountController(r *gin.RouterGroup) error {
 			ServerError("Fail to get download link", err, c)
 			return
 		}
-		c.JSON(200, gin.H{"file": driveFile, "link": link})
+		c.JSON(200, gin.H{"file": driveFile, "link": link,
+		})
 	})
 
 	r.GET("/:id/file/:fileId/sharableLink", func(c *gin.Context) {
@@ -185,7 +190,23 @@ func AccountController(r *gin.RouterGroup) error {
 			ServerError("Fail to get download link", err, c)
 			return
 		}
-		c.JSON(200, gin.H{"file": driveFile, "link": link})
+		downloadLink := fmt.Sprintf("https://drive.google.com/uc?id=%s&export=download", c.Param("fileId"))
+		resp, err := http.Get(downloadLink)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+
+		doc, err := goquery.NewDocumentFromResponse(resp)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		href := doc.Find("#uc-download-link").First().AttrOr("href", "")
+		c.JSON(200, gin.H{"file": driveFile, "link": link,
+			"directLink" : "https://drive.google.com" + strings.ReplaceAll(href, "&amp;", "&"),
+			"cookie": resp.Header.Get("Set-Cookie")})
 	})
 
 	r.GET("/:id/refreshQuota", func(c *gin.Context) {
