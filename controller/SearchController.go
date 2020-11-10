@@ -3,9 +3,9 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
-	"github.com/ndphu/drive-manager-api/dao"
-	"github.com/ndphu/drive-manager-api/entity"
-	"github.com/ndphu/drive-manager-api/middleware"
+	"drive-manager-api/dao"
+	"drive-manager-api/entity"
+	"drive-manager-api/middleware"
 	"sync"
 )
 

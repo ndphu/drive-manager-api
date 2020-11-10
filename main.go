@@ -5,9 +5,9 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
-	"github.com/ndphu/drive-manager-api/controller"
-	"github.com/ndphu/drive-manager-api/dao"
-	"github.com/ndphu/drive-manager-api/entity"
+	"drive-manager-api/controller"
+	"drive-manager-api/dao"
+	"drive-manager-api/entity"
 	"log"
 )
 

@@ -3,7 +3,7 @@ package dao
 import (
 	"crypto/tls"
 	"github.com/globalsign/mgo"
-	"github.com/ndphu/drive-manager-api/config"
+	"drive-manager-api/config"
 	"log"
 	"net"
 )
