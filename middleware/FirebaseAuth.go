@@ -13,6 +13,9 @@ func FirebaseAuthMiddleware() gin.HandlerFunc {
 		authHeader := c.Request.Header.Get("Authorization")
 		token := strings.TrimPrefix(authHeader,"Bearer ")
 		if token == "" {
+			token = c.Query("token")
+		}
+		if token == "" {
 			c.AbortWithStatusJSON(401, gin.H{"errors": "Missing JWT Token"})
 		} else {
 			log.Println("JWT Token", token)

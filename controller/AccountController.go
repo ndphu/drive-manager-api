@@ -11,6 +11,7 @@ import (
 	"drive-manager-api/service"
 	"drive-manager-api/utils"
 	helper "github.com/ndphu/google-api-helper"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -191,6 +192,7 @@ func AccountController(r *gin.RouterGroup) error {
 			return
 		}
 		downloadLink := fmt.Sprintf("https://drive.google.com/uc?id=%s&export=download", c.Param("fileId"))
+		fmt.Println(downloadLink)
 		resp, err := http.Get(downloadLink)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
@@ -204,9 +206,162 @@ func AccountController(r *gin.RouterGroup) error {
 			return
 		}
 		href := doc.Find("#uc-download-link").First().AttrOr("href", "")
-		c.JSON(200, gin.H{"file": driveFile, "link": link,
-			"directLink" : "https://drive.google.com" + strings.ReplaceAll(href, "&amp;", "&"),
-			"cookie": resp.Header.Get("Set-Cookie")})
+		//var client = http.DefaultClient
+		var cookies []string
+		for k, v := range resp.Header {
+			if k == "Set-Cookie" {
+				cookies = v
+			}
+		}
+		log.Println(len(cookies))
+		dl := "https://drive.google.com" + strings.ReplaceAll(href, "&amp;", "&")
+		fmt.Println(dl)
+		req, err := http.NewRequest("GET", dl, nil)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		req.Header.Set("Cookie", strings.Join(cookies, ";"))
+		client := http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+		defer resp.Body.Close()
+
+		redirect := resp.Header.Get("Location")
+		log.Println(redirect)
+		req, _ = http.NewRequest("GET", redirect, nil)
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+		authCookie := resp.Header.Get("Set-Cookie")
+		log.Println("AuthCookie", authCookie)
+		defer resp.Body.Close()
+
+		redirect = resp.Header.Get("Location")
+		log.Println(redirect)
+
+		req, _ = http.NewRequest("GET", redirect, nil)
+		req.Header.Set("Cookie", strings.Join(cookies, ";"))
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+
+		defer resp.Body.Close()
+		redirect = resp.Header.Get("Location")
+		log.Println(redirect)
+
+		c.JSON(200, gin.H{
+			"file":        driveFile,
+			"link":        link,
+			"directLink" : redirect,
+			"cookies":     authCookie})
+	})
+
+	r.GET("/:id/file/:fileId/downloadRedirect", func(c *gin.Context) {
+		acc, err := accountService.FindAccount(c.Param("id"))
+		if err != nil {
+			ServerError("Fail to get account", err, c)
+			return
+		}
+		driveService, err := helper.GetDriveService([]byte(acc.Key))
+		if err != nil {
+			ServerError("Fail to initialize drive service", err, c)
+			return
+		}
+		_, _, err = driveService.GetSharableLink(c.Param("fileId"))
+		if err != nil {
+			ServerError("Fail to get download link", err, c)
+			return
+		}
+		downloadLink := fmt.Sprintf("https://drive.google.com/uc?id=%s&export=download", c.Param("fileId"))
+		fmt.Println(downloadLink)
+		resp, err := http.Get(downloadLink)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+
+		doc, err := goquery.NewDocumentFromResponse(resp)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		href := doc.Find("#uc-download-link").First().AttrOr("href", "")
+		//var client = http.DefaultClient
+		var cookies []string
+		for k, v := range resp.Header {
+			if k == "Set-Cookie" {
+				cookies = v
+			}
+		}
+		log.Println(len(cookies))
+		dl := "https://drive.google.com" + strings.ReplaceAll(href, "&amp;", "&")
+		fmt.Println(dl)
+		req, err := http.NewRequest("GET", dl, nil)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		req.Header.Set("Cookie", strings.Join(cookies, ";"))
+		client := http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+		defer resp.Body.Close()
+
+		redirect := resp.Header.Get("Location")
+		log.Println(redirect)
+		req, _ = http.NewRequest("GET", redirect, nil)
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+		authCookie := resp.Header.Get("Set-Cookie")
+		log.Println("AuthCookie", authCookie)
+		defer resp.Body.Close()
+
+		redirect = resp.Header.Get("Location")
+		log.Println(redirect)
+
+		req, _ = http.NewRequest("GET", redirect, nil)
+		req.Header.Set("Cookie", strings.Join(cookies, ";"))
+		resp, err = client.Do(req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		log.Println(resp.Status)
+
+		defer resp.Body.Close()
+		redirect = resp.Header.Get("Location")
+		log.Println(redirect)
+
+		c.Header("Set-Cookie", authCookie)
+		c.Redirect(302, redirect)
 	})
 
 	r.GET("/:id/refreshQuota", func(c *gin.Context) {
