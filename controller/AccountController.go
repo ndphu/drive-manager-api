@@ -1,20 +1,23 @@
 package controller
 
 import (
+	"drive-manager-api/entity"
+	"drive-manager-api/middleware"
+	"drive-manager-api/service"
+	"drive-manager-api/utils"
 	"encoding/base64"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
-	"drive-manager-api/entity"
-	"drive-manager-api/middleware"
-	"drive-manager-api/service"
-	"drive-manager-api/utils"
 	helper "github.com/ndphu/google-api-helper"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func AccountController(r *gin.RouterGroup) error {
@@ -271,7 +274,7 @@ func AccountController(r *gin.RouterGroup) error {
 			"cookies":     authCookie})
 	})
 
-	r.GET("/:id/file/:fileId/downloadRedirect", func(c *gin.Context) {
+	r.GET("/:id/file/:fileId/stream", func(c *gin.Context) {
 		acc, err := accountService.FindAccount(c.Param("id"))
 		if err != nil {
 			ServerError("Fail to get account", err, c)
@@ -360,8 +363,7 @@ func AccountController(r *gin.RouterGroup) error {
 		redirect = resp.Header.Get("Location")
 		log.Println(redirect)
 
-		c.Header("Set-Cookie", authCookie)
-		c.Redirect(302, redirect)
+		stream(c, redirect, authCookie)
 	})
 
 	r.GET("/:id/refreshQuota", func(c *gin.Context) {
@@ -433,4 +435,31 @@ func AccountController(r *gin.RouterGroup) error {
 	})
 
 	return nil
+}
+func stream(c *gin.Context, url string, cookie string) {
+	timeout := time.Duration(5) * time.Second
+	transport := &http.Transport{
+		ResponseHeaderTimeout: timeout,
+		Dial: func(network, addr string) (net.Conn, error) {
+			return net.DialTimeout(network, addr, timeout)
+		},
+		DisableKeepAlives: true,
+	}
+	client := &http.Client{
+		Transport: transport,
+	}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Cookie", cookie)
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer resp.Body.Close()
+
+	c.Writer.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
+	c.Writer.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
+
+	//stream the body to the client without fully loading it into memory
+	io.Copy(c.Writer, resp.Body)
 }
