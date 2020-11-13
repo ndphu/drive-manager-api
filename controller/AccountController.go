@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
 	helper "github.com/ndphu/google-api-helper"
+	"github.com/nu7hatch/gouuid"
 	"io"
 	"log"
 	"net"
@@ -267,11 +268,22 @@ func AccountController(r *gin.RouterGroup) error {
 		redirect = resp.Header.Get("Location")
 		log.Println(redirect)
 
+		fileId, _ := uuid.NewV4()
+
+		redisService, err := service.GetRedisService()
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		redisService.Save("file:" + fileId.String() + ":auth", authCookie)
+		redisService.Save("file:" + fileId.String() + ":url", redirect)
+
 		c.JSON(200, gin.H{
-			"file":        driveFile,
-			"link":        link,
-			"directLink" : redirect,
-			"cookies":     authCookie})
+			"file":       driveFile,
+			"link":       link,
+			"directLink": redirect,
+			"uuid":       fileId.String(),
+			"cookies":    authCookie})
 	})
 
 	r.GET("/:id/file/:fileId/stream", func(c *gin.Context) {
@@ -455,6 +467,7 @@ func stream(c *gin.Context, url string, cookie string) {
 		fmt.Println(err)
 	}
 	defer resp.Body.Close()
+	fmt.Println(resp.StatusCode, resp.Status)
 
 	//c.Writer.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
 	c.Writer.Header().Set("Content-Type", resp.Header.Get("Content-Type"))

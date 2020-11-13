@@ -1,17 +1,17 @@
 package main
 
 import (
+	"drive-manager-api/controller"
+	"drive-manager-api/dao"
+	"drive-manager-api/entity"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
-	"drive-manager-api/controller"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
 	"log"
 )
-
 func main() {
+
 	r := gin.Default()
 
 	c := cors.DefaultConfig()
@@ -28,6 +28,7 @@ func main() {
 	controller.UserController(api.Group("/user"))
 	controller.ProjectController(api.Group("/project"))
 	controller.AdminController(api.Group("/admin"))
+	controller.StreamController(api.Group("/stream"))
 
 	//updateProjects()
 
