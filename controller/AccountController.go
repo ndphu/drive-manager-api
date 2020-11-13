@@ -456,7 +456,7 @@ func stream(c *gin.Context, url string, cookie string) {
 	}
 	defer resp.Body.Close()
 
-	c.Writer.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
+	//c.Writer.Header().Set("Content-Disposition", resp.Header.Get("Content-Disposition"))
 	c.Writer.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	c.Writer.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 
