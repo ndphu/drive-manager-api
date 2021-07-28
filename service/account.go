@@ -1,20 +1,21 @@
 package service
 
 import (
+	"drive-manager-api/dao"
+	"drive-manager-api/entity"
+	"drive-manager-api/helper"
 	"encoding/json"
 	"fmt"
 	"github.com/globalsign/mgo/bson"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
-	driveApi "github.com/ndphu/google-api-helper"
 	"google.golang.org/api/drive/v3"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 )
 
 type AccountService struct {
-	//accountCache map[string]*driveApi.DriveService
+	//accountCache map[string]*helper.DriveService
 }
 
 type KeyDetails struct {
@@ -25,7 +26,7 @@ type KeyDetails struct {
 }
 
 func (s *AccountService) Save(account *entity.DriveAccount) error {
-	account.Id = bson.NewObjectId();
+	account.Id = bson.NewObjectId()
 	return dao.Collection("drive_account").Insert(account)
 }
 
@@ -46,6 +47,7 @@ func (s *AccountService) FindAccounts(page int, size int, includeKey bool, owner
 	err := dao.Collection("drive_account").
 		Find(bson.M{"owner": bson.ObjectIdHex(owner)}).
 		Select(bson.M{"key": includeKey}).
+		Sort("name").
 		Skip((page - 1) * size).
 		Limit(size + 1).
 		All(&list)
@@ -57,6 +59,61 @@ func (s *AccountService) FindAccounts(page int, size int, includeKey bool, owner
 	return list, hasMore, err
 }
 
+type AccountLookup struct {
+	Id          bson.ObjectId  `json:"id" bson:"_id"`
+	Name        string         `json:"name" bson:"name"`
+	Desc        string         `json:"desc" bson:"desc"`
+	Type        string         `json:"type" bson:"type"`
+	Key         string         `json:"-" bson:"key"`
+	ClientEmail string         `json:"clientEmail" bson:"clientEmail"`
+	ClientId    string         `json:"clientId" bson:"clientId"`
+	Usage       int64          `json:"usage" bson:"usage"`
+	Limit       int64          `json:"limit" bson:"limit"`
+	Project     entity.Project `json:"project" bson:"project"`
+	Files       []*helper.File `json:"files"`
+}
+
+func (s *AccountService) FindAccountLookup(id string) (*AccountLookup, error) {
+	var acc AccountLookup
+	err := dao.Collection("drive_account").Pipe([]bson.M{
+		{"$match": bson.M{"_id": bson.ObjectIdHex(id)}},
+		{"$lookup": bson.M{
+			"from":         "project",
+			"localField":   "projectId",
+			"foreignField": "_id",
+			"as":           "projects",
+		}},
+		{"$addFields": bson.M{
+			"project": bson.M{
+				"$arrayElemAt": []interface{}{"$projects", 0},
+			},
+		}},
+		{
+			"$project": bson.M{
+				"projects": 0,
+			},
+		},
+	}).One(&acc)
+	if err != nil {
+		return nil, err
+	}
+
+	srv, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		return nil, err
+	}
+	files, err := srv.ListFiles(1, 50)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		file.AccountId = id
+	}
+	acc.Files = files
+
+	return &acc, err
+}
+
 func (s *AccountService) FindAccount(id string) (*entity.DriveAccount, error) {
 	var acc entity.DriveAccount
 	err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(id)).One(&acc)
@@ -66,13 +123,13 @@ func (s *AccountService) FindAccount(id string) (*entity.DriveAccount, error) {
 func (s *AccountService) FindAccountById(id bson.ObjectId, owner bson.ObjectId) (*entity.DriveAccount, error) {
 	var acc entity.DriveAccount
 	err := dao.Collection("drive_account").Find(bson.M{
-		"_id": id,
+		"_id":   id,
 		"owner": owner,
 	}).One(&acc)
 	return &acc, err
 }
 
-func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) (error) {
+func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) error {
 	var kd KeyDetails
 	err := json.Unmarshal(key, &kd)
 	if err != nil {
@@ -86,7 +143,7 @@ func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) (er
 	return nil
 }
 
-func (s *AccountService) UpdateKey(id string, key []byte) (error) {
+func (s *AccountService) UpdateKey(id string, key []byte) error {
 	var acc entity.DriveAccount
 	err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(id)).One(&acc)
 	if err != nil {
@@ -99,7 +156,7 @@ func (s *AccountService) UpdateKey(id string, key []byte) (error) {
 	return dao.Collection("drive_account").UpdateId(bson.ObjectIdHex(id), &acc)
 }
 func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
-	driveService, err := driveApi.GetDriveService([]byte(acc.Key))
+	driveService, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
 		return err
 	}
@@ -136,7 +193,7 @@ type FileAggregateResult struct {
 	AccountKey string        `json:"accountKey" bson:"accountKey"`
 }
 
-func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *driveApi.DownloadDetails, error) {
+func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *helper.DownloadDetails, error) {
 	res := FileAggregateResult{}
 	if err := dao.Collection("file").Pipe([]bson.M{
 		{"$match": bson.M{"_id": bson.ObjectIdHex(fileId)}},
@@ -155,7 +212,7 @@ func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *d
 	}).One(&res); err != nil {
 		return nil, nil, err
 	}
-	srv, err := driveApi.GetDriveService([]byte(res.AccountKey))
+	srv, err := helper.GetDriveService([]byte(res.AccountKey))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,12 +224,12 @@ func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *d
 	return gFile, link, nil
 }
 
-func getDriveService(driveId bson.ObjectId) (*driveApi.DriveService, error) {
+func getDriveService(driveId bson.ObjectId) (*helper.DriveService, error) {
 	acc := entity.DriveAccount{}
 	if err := dao.Collection("drive_account").FindId(driveId).One(&acc); err != nil {
 		return nil, err
 	}
-	return driveApi.GetDriveService([]byte(acc.Key))
+	return helper.GetDriveService([]byte(acc.Key))
 
 }
 
@@ -228,12 +285,12 @@ func (s *AccountService) UpdateAccountQuotaByOwner(owner bson.ObjectId) error {
 
 var accountService *AccountService
 
-func GetAccountService() (*AccountService, error) {
+func GetAccountService() *AccountService {
 	if accountService == nil {
 		accountService = &AccountService{
 		}
 	}
-	return accountService, nil
+	return accountService
 }
 
 func (s *AccountService) GetAccountCount() int {
@@ -241,9 +298,74 @@ func (s *AccountService) GetAccountCount() int {
 	return n
 }
 func (s *AccountService) GetAccessToken(acc *entity.DriveAccount) (string, error) {
-	srv, err := driveApi.GetDriveService([]byte(acc.Key))
+	srv, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
 		return "", err
 	}
 	return srv.GetAccessToken()
+}
+
+func (s *AccountService) CreateServiceAccount(projectId string, userId string) (*entity.DriveAccount, error) {
+	admin, err := s.FindAdminAccount(projectId, userId)
+	if err != nil {
+		log.Println("Unable to find admin account for this project by error", err.Error())
+		return nil, err
+	}
+
+	key, err := parseKeyDetails([]byte(admin.Key))
+	if err != nil {
+		log.Println("Fail to parse key of admin account")
+		return nil, err
+	}
+
+	iamService, err := helper.NewIamService([]byte(admin.Key))
+	if err != nil {
+		log.Println("Fail to initialize IAM service with admin key by error", err.Error())
+		return nil, err
+	}
+
+	serviceAccountId := "sa-" + strconv.FormatInt(time.Now().Unix(), 16)
+	account, err := iamService.CreateServiceAccount(key.ProjectId, serviceAccountId, "Automate account")
+	if err != nil {
+		log.Println("Fail to create service account by error", err.Error())
+		return nil, err
+	}
+	saKey, err := iamService.CreateServiceAccountKey(account)
+	if err != nil {
+		log.Println("Fail to generate service account key file by error", err.Error())
+		return nil, err
+	}
+
+	acc := &entity.DriveAccount{
+		Id:                   bson.NewObjectId(),
+		Name:                 serviceAccountId,
+		Desc:                 account.DisplayName,
+		Type:                 "service_account",
+		ClientEmail:          account.Email,
+		ClientId:             account.Oauth2ClientId,
+		Key:                  string(saKey),
+		Usage:                0,
+		Limit:                0,
+		Owner:                bson.ObjectIdHex(userId),
+		ProjectId:            bson.ObjectIdHex(projectId),
+		QuotaUpdateTimestamp: time.Time{},
+	}
+
+	if err := dao.Collection("drive_account").Insert(acc); err != nil {
+		return nil, err
+	}
+
+	return acc, nil
+}
+
+func (s *AccountService) FindAdminAccount(projectId string, userId string) (*entity.DriveAccount, error) {
+	var admin entity.DriveAccount
+	if err := dao.Collection("drive_account").Find(bson.M{
+		"projectId": bson.ObjectIdHex(projectId),
+		"owner":     bson.ObjectIdHex(userId),
+		"type":      "service_account_admin",
+	}).One(&admin); err != nil {
+		return nil, err
+	}
+	return &admin, nil
 }

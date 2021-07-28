@@ -3,7 +3,6 @@ package middleware
 import (
 	"drive-manager-api/service"
 	"github.com/gin-gonic/gin"
-	"log"
 	"strings"
 )
 
@@ -18,7 +17,6 @@ func FirebaseAuthMiddleware() gin.HandlerFunc {
 		if token == "" {
 			c.AbortWithStatusJSON(401, gin.H{"errors": "Missing JWT Token"})
 		} else {
-			log.Println("JWT Token", token)
 			user, err := authService.GetUserFromToken(token)
 			if err != nil {
 				c.AbortWithStatusJSON(401, gin.H{"err": err})

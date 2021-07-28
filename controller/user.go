@@ -37,7 +37,7 @@ type UserInfo struct {
 
 func UserController(r *gin.RouterGroup) {
 	authService, _ := service.GetAuthService()
-	accountService, _ := service.GetAccountService()
+	accountService := service.GetAccountService()
 
 	r.POST("/register", func(c *gin.Context) {
 		ri := RegisterInfo{}
@@ -58,11 +58,12 @@ func UserController(r *gin.RouterGroup) {
 		loginInfo := LoginWithFirebase{}
 		err := c.ShouldBindJSON(&loginInfo)
 		if err != nil {
-			BadRequest("invalid login data", err, c)
+			c.AbortWithStatusJSON(400, gin.H{"error": err})
+			return
 		}
 		user, jwtToken, err := authService.LoginWithFirebaseToken(loginInfo.Token)
 		if err != nil {
-			ServerError("fail to login", err, c)
+			c.AbortWithStatusJSON(400, gin.H{"error": err})
 			return
 		}
 

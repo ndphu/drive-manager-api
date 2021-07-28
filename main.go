@@ -23,12 +23,13 @@ func main() {
 	r.Use(cors.New(c))
 
 	api := r.Group("/api")
-	controller.AccountController(api.Group("/manage/driveAccount"))
+	controller.AccountController(api.Group("/manage"))
 	controller.SearchController(api.Group("/search"))
 	controller.UserController(api.Group("/user"))
-	controller.ProjectController(api.Group("/project"))
+	controller.ProjectController(api.Group("/manage"))
 	controller.AdminController(api.Group("/admin"))
 	controller.StreamController(api.Group("/stream"))
+	controller.ViewController(api.Group("/manage/view"))
 
 	//updateProjects()
 

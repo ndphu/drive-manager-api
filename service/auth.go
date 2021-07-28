@@ -112,9 +112,12 @@ func (s *AuthService) CreateUserWithEmail(email string, password string, display
 
 func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User, string, error) {
 	client, err := s.App.Auth(context.Background())
+	if err != nil {
+		return nil, "", err
+	}
 	token, err := client.VerifyIDToken(context.Background(), firebaseToken)
 	if err != nil {
-		log.Println("fail to parse token")
+		log.Println("Fail to parse token")
 		return nil, "", err
 	}
 	user := entity.User{}
@@ -131,13 +134,14 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 
 	now := time.Now()
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iat":        now.Unix(),
-		"exp":        now.AddDate(0, 0, 1).Unix(),
-		"user_id":    user.Id.Hex(),
-		"user_email": user.Email,
-		"roles":      user.Roles,
-		"provider":   "Firebase",
-		"type":       "login_token",
+		"iat":          now.Unix(),
+		"exp":          now.AddDate(0, 0, 1).Unix(),
+		"user_id":      user.Id.Hex(),
+		"user_email":   user.Email,
+		"display_name": user.DisplayName,
+		"roles":        user.Roles,
+		"provider":     "Firebase",
+		"type":         "login_token",
 	})
 	jwtTokenString, err := jwtToken.SignedString([]byte(os.Getenv("TOKEN_SECRET")))
 	return &user, jwtTokenString, err

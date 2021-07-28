@@ -1,16 +1,18 @@
 package service
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"github.com/globalsign/mgo/bson"
-	"github.com/globalsign/mgo/txn"
+	"context"
 	"drive-manager-api/dao"
 	"drive-manager-api/entity"
-	"github.com/ndphu/google-api-helper"
-	"golang.org/x/oauth2"
+	"drive-manager-api/helper"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"github.com/globalsign/mgo/bson"
+	"github.com/globalsign/mgo/txn"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/option"
 	"google.golang.org/api/serviceusage/v1"
 	"log"
 	"math/rand"
@@ -32,22 +34,38 @@ func GetProjectService() *ProjectService {
 	return projectService
 }
 
-func (s *ProjectService) CreateProject(displayName string, key []byte, owner bson.ObjectId) (*entity.Project, error) {
+func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfAccounts int, owner bson.ObjectId) (*entity.Project, error) {
 	kd := KeyDetails{}
 	if err := json.Unmarshal(key, &kd); err != nil {
+		log.Println("Fail to parse project admin key by error", err.Error())
 		return nil, err
+	}
+	// validate project ID from key file should be unique
+	if count, err := dao.Collection("project").Find(bson.M{"projectId": kd.ProjectId}).Count(); err != nil {
+		log.Println("Fail to check key unique with database", err.Error())
+		return nil, err
+	} else if count > 0 {
+		log.Println("Project ID", kd.ProjectId, "is not unique")
+		return nil, errors.New("DuplicatedGoogleProjectId")
 	}
 
 	if err := enableRequiredAPIs(key); err != nil {
+		log.Println("Fail to enable required API by error", err.Error())
 		return nil, err
 	}
 
 	project, account, err := s.insertProject(displayName, key, owner)
 	if err != nil {
+		log.Println("Fail to insert project to database by error", err.Error())
 		return nil, err
 	}
 
-	s.ProvisionProject(project, account)
+	if numberOfAccounts > 0 {
+		if err := s.ProvisionProject(project, account, numberOfAccounts); err != nil {
+			log.Println("Fail to provision project by error", err.Error())
+			return nil, err
+		}
+	}
 
 	return project, nil
 }
@@ -57,20 +75,19 @@ func (s *ProjectService) insertProject(displayName string, key []byte, owner bso
 	if err := json.Unmarshal(key, &kd); err != nil {
 		return nil, nil, err
 	}
-	projectUID := bson.NewObjectId()
+	pid := bson.NewObjectId()
 	accountId := bson.NewObjectId()
-	accountName := "admin-" + strconv.FormatInt(time.Now().Unix(), 16)
 	prj := entity.Project{
-		Id:          projectUID,
-		Owner:       owner,
+		Id:          pid,
 		DisplayName: displayName,
 		ProjectId:   kd.ProjectId,
+		Owner:       owner,
 	}
 
 	acc := entity.DriveAccount{
 		Id:          accountId,
-		ProjectId:   projectUID,
-		Name:        accountName,
+		ProjectId:   pid,
+		Name:        "admin-account",
 		Key:         string(key),
 		Desc:        "Admin Account",
 		Type:        "service_account_admin",
@@ -88,7 +105,7 @@ func (s *ProjectService) insertProject(displayName string, key []byte, owner bso
 		Insert: acc,
 	}, {
 		C:      "project",
-		Id:     projectUID,
+		Id:     pid,
 		Assert: txn.DocMissing,
 		Insert: prj,
 	}}
@@ -107,8 +124,9 @@ func enableRequiredAPIs(key []byte) error {
 	if err != nil {
 		return err
 	}
-	client := config.Client(oauth2.NoContext)
-	srv, err := serviceusage.New(client)
+	ctx := context.Background()
+	//client := config.Client(ctx)
+	srv, err := serviceusage.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx)))
 
 	stateResp, err := srv.Services.
 		List("projects/" + kd.ProjectId).
@@ -137,27 +155,40 @@ func enableRequiredAPIs(key []byte) error {
 	return nil
 }
 
-func (s *ProjectService) ProvisionProject(project *entity.Project, adminAccount *entity.DriveAccount) {
-	accSrv, _ := GetAccountService()
+func (s *ProjectService) ProvisionProject(project *entity.Project, adminAccount *entity.DriveAccount, numberOfAccounts int) error {
+	accSrv := GetAccountService()
 
 	config, err := google.JWTConfigFromJSON([]byte(adminAccount.Key), iam.CloudPlatformScope)
 	if err != nil {
-		// TODO: write provision_event FAIL TO INITIALIZE MANAGER KEY
-		return
+		log.Println("Fail to initialize with project admin key", err.Error())
+		return nil
 	}
 
-	client := config.Client(oauth2.NoContext)
-	iamSrv, err := iam.New(client)
-
-	jobs := make(chan int, 100)
-
-	for w := 1; w <= 4; w++ {
-		go worker(w, jobs, iamSrv, project, accSrv)
+	iamService, err := iam.NewService(context.Background(), option.WithTokenSource(config.TokenSource(context.Background())))
+	if err != nil {
+		log.Println("Fail to create IAM service instance", err.Error())
+		return err
 	}
 
-	for i := 0; i < 99; i++ {
-		jobs <- i
+	for i := 0; i < numberOfAccounts; i++ {
+		if err := createServiceAccountAutomate(iamService, project, accSrv); err != nil {
+			log.Println("Fail to create service account by error", err.Error())
+			return err
+		}
 	}
+
+	return nil
+
+	//
+	//jobs := make(chan int, numberOfAccounts)
+	//
+	//for w := 1; w <= 4; w++ {
+	//	go worker(w, jobs, iamSrv, project, accSrv)
+	//}
+	//
+	//for i := 0; i < numberOfAccounts; i++ {
+	//	jobs <- i
+	//}
 }
 
 func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) {
@@ -169,20 +200,23 @@ func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Projec
 }
 
 func createServiceAccountAutomate(iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) error {
-	accountName := "account-" + strconv.FormatInt(time.Now().Unix()+int64(rand.Intn(100000)), 16)
+	accountName := "sa-" + strconv.FormatInt(time.Now().Unix()+int64(rand.Intn(100000)), 16)
 	account, err := createServiceAccount(iamSrv, project.ProjectId, accountName, "automate account "+accountName)
 	if err != nil {
 		// TODO: write provision_event FAIL TO CREATE SERVICE ACCOUNT
+		log.Println("Fail to create service account by error", err.Error())
 		return err
 	}
 	serviceAccountKey, err := createKeyFile(iamSrv, account)
 	if err != nil {
 		// TODO: write provision_event FAIL TO GENERATE KEY FILE
+		log.Println("Fail to generate service account key file by error", err.Error())
 		return err
 	}
 	newAcc := entity.DriveAccount{}
 	if err := accSrv.InitializeKey(&newAcc, serviceAccountKey); err != nil {
 		// TODO: write provision_event FAIL TO PARSE GENERATED KEY FILE
+		log.Println("Fail to parse service account key file by error", err.Error())
 		return err
 	}
 	newAcc.Name = accountName
@@ -190,15 +224,17 @@ func createServiceAccountAutomate(iamSrv *iam.Service, project *entity.Project, 
 	newAcc.ProjectId = project.Id
 	newAcc.Key = string(serviceAccountKey)
 
-	srv, err := google_api_helper.GetDriveService(serviceAccountKey)
-
-	tried := 0
+	srv, err := helper.GetDriveService(serviceAccountKey)
+	if err != nil {
+		log.Println("Fail to get drive service from account key by error", err.Error())
+		return err
+	}
+	tries := 0
 	for {
-		tried ++
+		tries++
 		quota, err := srv.GetQuotaUsage()
-
 		if err != nil {
-			log.Println("Account may not ready at this moment. Tried:", tried)
+			log.Println("Account may not ready at this moment. Tries:", tries)
 			time.Sleep(5 * time.Second)
 		} else {
 			log.Println("Account is now available")
@@ -207,14 +243,14 @@ func createServiceAccountAutomate(iamSrv *iam.Service, project *entity.Project, 
 			newAcc.QuotaUpdateTimestamp = time.Now()
 			break
 		}
-
-		if tried >= 30 {
+		if tries >= 30 {
 			return err
 		}
 	}
 
 	if err := accSrv.Save(&newAcc); err != nil {
 		// TODO: write provision_event FAIL TO SAVE NEW ACCOUNT TO DB
+		log.Println("Fail to save new service account to DB")
 		return err
 	}
 
@@ -239,10 +275,18 @@ func createKeyFile(srv *iam.Service, account *iam.ServiceAccount) ([]byte, error
 	if err != nil {
 		return make([]byte, 0), err
 	}
-	//log.Println(key.MarshalJSON())
 	keyBytes, err := base64.StdEncoding.DecodeString(key.PrivateKeyData)
 	if err != nil {
 		return make([]byte, 0), err
 	}
 	return keyBytes, nil
+}
+
+func parseKeyDetails(key []byte) (*KeyDetails, error) {
+	kd := KeyDetails{}
+	if err := json.Unmarshal(key, &kd); err != nil {
+		log.Println("Fail to parse project admin key by error", err.Error())
+		return nil, err
+	}
+	return &kd, nil
 }
