@@ -191,6 +191,32 @@ func (s *ProjectService) ProvisionProject(project *entity.Project, adminAccount 
 	//}
 }
 
+func (s *ProjectService) SyncProject(projectId string, userId string) error {
+	var p entity.Project
+	if err := dao.Collection("project").
+		Find(bson.M{"_id": bson.ObjectIdHex(projectId), "owner": bson.ObjectIdHex(userId)}).One(&p);
+	 err != nil {
+	 	log.Println("Fail to find project to perform sync by error", err.Error())
+	 	return err
+	}
+	var accList []entity.DriveAccount
+	 if err := dao.Collection("drive_account").Find(bson.M{
+	 	"projectId": bson.ObjectIdHex(projectId),
+	 	"owner": bson.ObjectIdHex(userId),
+	 }).All(&accList); err != nil {
+	 	log.Println("Fail to get account list by error", err.Error())
+	 	return err
+	 }
+
+	 for _, acc := range accList {
+		 if err := accountService.IndexAccountFiles(acc); err != nil {
+		 	log.Println("Fail to sync account", acc.Id.Hex(), "by error", err.Error())
+		 }
+	 }
+	 // TODO: should aggregate error here!
+	 return nil
+}
+
 func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) {
 	log.Println("started worker", id)
 	for i := range jobs {

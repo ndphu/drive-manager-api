@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"drive-manager-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
 	"drive-manager-api/dao"
@@ -12,14 +13,16 @@ import (
 func SearchController(r *gin.RouterGroup) error {
 	r.Use(middleware.FirebaseAuthMiddleware())
 	r.GET("quickSearch", func(c *gin.Context) {
+		user := CurrentUser(c)
 		query := c.Query("query")
-		files := make([]entity.DriveFile, 0)
+		files := make([]service.FileIndex, 0)
 		accounts := make([]entity.DriveAccount, 0)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			dao.Collection("file").Find(bson.M{
+			dao.Collection("file_index").Find(bson.M{
+				"owner": user.Id,
 				"name": bson.RegEx{Pattern: query, Options: "i"},
 			}).Limit(20).All(&files)
 		}()
@@ -29,6 +32,7 @@ func SearchController(r *gin.RouterGroup) error {
 			dao.Collection("drive_account").
 				Find(bson.M{
 					"name": bson.RegEx{Pattern: query, Options: "i"},
+					"owner": user.Id,
 				}).
 				Select(bson.M{
 					"_id":  1,

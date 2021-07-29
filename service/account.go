@@ -73,10 +73,13 @@ type AccountLookup struct {
 	Files       []*helper.File `json:"files"`
 }
 
-func (s *AccountService) FindAccountLookup(id string) (*AccountLookup, error) {
+func (s *AccountService) FindAccountLookup(id string, userId string) (*AccountLookup, error) {
 	var acc AccountLookup
 	err := dao.Collection("drive_account").Pipe([]bson.M{
-		{"$match": bson.M{"_id": bson.ObjectIdHex(id)}},
+		{"$match": bson.M{
+			"_id":   bson.ObjectIdHex(id),
+			"owner": bson.ObjectIdHex(userId),
+		}},
 		{"$lookup": bson.M{
 			"from":         "project",
 			"localField":   "projectId",
@@ -368,4 +371,77 @@ func (s *AccountService) FindAdminAccount(projectId string, userId string) (*ent
 		return nil, err
 	}
 	return &admin, nil
+}
+
+type FileIndex struct {
+	Id           bson.ObjectId `json:"id" bson:"_id"`
+	FileId       string        `json:"fileId" bson:"fileId"`
+	Name         string        `json:"name" bson:"name"`
+	Size         int64         `json:"size" bson:"size"`
+	MimeType     string        `json:"mimeType" bson:"mimeType"`
+	AccountId    bson.ObjectId `json:"accountId" bson:"accountId"`
+	Owner        bson.ObjectId `json:"owner" bson:"owner"`
+	ProjectId    bson.ObjectId `json:"projectId" bson:"projectId"`
+	CreatedTime  time.Time     `json:"createdTime" bson:"createdTime"`
+	ModifiedTime time.Time     `json:"modifiedTime" bson:"modifiedTime"`
+	SyncTime     time.Time     `json:"syncTime" bson:"syncTime"`
+}
+
+func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
+	ds, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		log.Println("Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
+		return err
+	}
+
+	if info, err := dao.Collection("file_index").RemoveAll(bson.M{
+		"accountId": acc.Id,
+	}); err != nil {
+		log.Println("Fail to remove old files index")
+	} else {
+		log.Printf("Change info %v\n", info)
+	}
+
+	page := 1
+	size := 500
+	for {
+		files, err := ds.ListFiles(page, int64(size))
+		if err != nil {
+			log.Println("Account", acc.Id.Hex(), "Fail to list files in account by error", err.Error())
+			return err
+		}
+
+		for _, file := range files {
+			log.Println(file.Id, file.Name, file.AccountId, file.MimeType)
+			ct, _ := time.Parse("2006-01-02T15:04:05Z", file.CreatedTime)
+			mt, _ := time.Parse("2006-01-02T15:04:05Z", file.ModifiedTime)
+
+			f := FileIndex{
+				Id:           bson.NewObjectId(),
+				FileId:       file.Id,
+				Name:         file.Name,
+				Size:         file.Size,
+				MimeType:     file.MimeType,
+				AccountId:    acc.Id,
+				Owner:        acc.Owner,
+				ProjectId:    acc.ProjectId,
+				CreatedTime:  ct,
+				ModifiedTime: mt,
+				SyncTime:     time.Now(),
+			}
+			if err := dao.Collection("file_index").Insert(f); err != nil {
+				log.Println("Fail to insert file index")
+				return err
+			}
+		}
+
+		if len(files) < size {
+			log.Println("Account", acc.Id.Hex(), "Looped to all file")
+			break
+		}
+		page = page + 1
+	}
+
+	return nil
+
 }

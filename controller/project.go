@@ -3,7 +3,6 @@ package controller
 import (
 	"drive-manager-api/dao"
 	"drive-manager-api/entity"
-	"drive-manager-api/middleware"
 	"drive-manager-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
@@ -30,7 +29,6 @@ type ProjectLookup struct {
 func ProjectController(r *gin.RouterGroup) {
 	s := service.GetProjectService()
 	accountService := service.GetAccountService()
-	r.Use(middleware.FirebaseAuthMiddleware())
 
 	r.GET("/projects", func(c *gin.Context) {
 		user := CurrentUser(c)

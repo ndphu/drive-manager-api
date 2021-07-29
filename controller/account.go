@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"io"
 	"log"
@@ -20,7 +21,7 @@ import (
 	"time"
 )
 
-func AccountController(r *gin.RouterGroup) error {
+func AccountController(r *gin.RouterGroup) {
 	accountService := service.GetAccountService()
 	googleService := service.GoogleService{}
 	r.Use(middleware.FirebaseAuthMiddleware())
@@ -86,12 +87,19 @@ func AccountController(r *gin.RouterGroup) error {
 	})
 
 	r.GET("/account/:id", func(c *gin.Context) {
-		acc, err := accountService.FindAccountLookup(c.Param("id"))
+		userId := CurrentUser(c).Id.Hex();
+		accountId := c.Param("id")
+		acc, err := accountService.FindAccountLookup(accountId, userId)
 		if err != nil {
-			ServerError("Fail to get account", err, c)
+			status := 500
+			if err == mgo.ErrNotFound {
+				status = 404
+			}
+			c.AbortWithStatusJSON(status, gin.H{"error": err.Error()})
 			return
+		} else {
+			c.JSON(200, gin.H{"success": true, "account": acc})
 		}
-		c.JSON(200, gin.H{"success": true, "account": acc})
 	})
 
 	r.POST("/account/:id/key", func(c *gin.Context) {
@@ -349,8 +357,6 @@ func AccountController(r *gin.RouterGroup) error {
 		}
 		c.JSON(200, gin.H{"accessToken": token})
 	})
-
-	return nil
 }
 func stream(c *gin.Context, url string, cookie string) {
 	timeout := time.Duration(5) * time.Second

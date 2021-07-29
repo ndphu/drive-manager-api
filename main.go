@@ -4,6 +4,7 @@ import (
 	"drive-manager-api/controller"
 	"drive-manager-api/dao"
 	"drive-manager-api/entity"
+	"drive-manager-api/middleware"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -25,13 +26,18 @@ func main() {
 
 	api := r.Group("/api")
 	controller.ConfigController(api.Group("/config"))
-	controller.AccountController(api.Group("/manage"))
 	controller.SearchController(api.Group("/search"))
 	controller.UserController(api.Group("/user"))
-	controller.ProjectController(api.Group("/manage"))
+
 	controller.AdminController(api.Group("/admin"))
 	controller.StreamController(api.Group("/stream"))
-	controller.ViewController(api.Group("/manage/view"))
+
+	manage := api.Group("/manage")
+	manage.Use(middleware.FirebaseAuthMiddleware())
+	controller.ProjectController(manage.Group("/"))
+	controller.AccountController(manage.Group("/"))
+	controller.ViewController(manage.Group("/view"))
+	controller.SyncController(manage.Group("/sync"))
 
 	//updateProjects()
 
