@@ -5,20 +5,21 @@ import (
 	"drive-manager-api/entity"
 	"drive-manager-api/helper"
 	"encoding/json"
+	"fmt"
 	"github.com/globalsign/mgo/bson"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
 	"log"
+	"os"
 	"strconv"
 	"time"
 )
 
-type GoogleService struct {
-}
+const DefaultDriveFileFormat = "https://www.googleapis.com/drive/v3/files/%s?alt=media&prettyPrint=false"
 
-type DownloadLink struct {
-	Link string `json:"link"`
+type GoogleService struct {
+
 }
 
 func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.DownloadDetails, error) {
@@ -33,13 +34,30 @@ func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.Downl
 		return nil, err
 	}
 
-	details, err := s.DownloadFile(fileId)
+	f, err := s.Service.Files.
+		Get(fileId).
+		Fields("id, name, size, mimeType").
+		Do()
 	if err != nil {
-		log.Println("Fail to get download link for file", fileId, "by error", err.Error())
+		log.Println("Fail to get file info from google", err.Error())
 		return nil, err
 	}
 
-	return details, nil
+	var linkFormat = os.Getenv("DRIVE_FILE_DOWNLOAD_LINK_TEMPLATE")
+	if linkFormat == "" {
+		linkFormat = DefaultDriveFileFormat
+	}
+
+	token, err := s.GetAccessToken()
+	if err != nil {
+		log.Println("Fail to get access token")
+		return nil, err
+	}
+	return &helper.DownloadDetails{
+		Link:       fmt.Sprintf(linkFormat, fileId),
+		Token:      token,
+		File: f,
+	}, nil
 }
 
 func (g *GoogleService) CreateServiceAccount(userId string, projectId string) error {

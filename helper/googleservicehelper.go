@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
 	"google.golang.org/api/drive/v3"
@@ -37,14 +36,14 @@ type DriveService struct {
 }
 
 type DownloadDetails struct {
-	Link       string `json:"link"`
-	Token      string `json:"token"`
-	UserAgent  string `json:"userAgent"`
-	XApiClient string `json:"xApiClient"`
+	Link       string      `json:"link,omitempty"`
+	Token      string      `json:"token,omitempty"`
+	UserAgent  string      `json:"userAgent,omitempty"`
+	XApiClient string      `json:"xApiClient,omitempty"`
+	File       *drive.File `json:"file,omitempty"`
 }
 
 var RedirectAttemptedError = errors.New("redirect")
-
 
 func GetDriveService(token []byte) (*DriveService, error) {
 	config, err := google.JWTConfigFromJSON(token, drive.DriveScope)
@@ -139,53 +138,6 @@ func (d *DriveService) DeleteAllFiles() error {
 	return nil
 }
 
-//<<<<<<< Updated upstream
-//func (d *DriveService) GetDownloadLink(fileId string) (*drive.File, *DownloadDetails, error) {
-//	file, err := d.Service.Files.Get(fileId).Fields("id, name, size, mimeType, webContentLink, webViewLink, shared").Do()
-//
-//	if err != nil {
-//		return nil, nil, err
-//=======
-//func (d *DriveService) GetDownloadLink(fileId string) (*drive.File, string, error) {
-//	file, err := d.Service.Files.Get(fileId).Fields("id, name, size, mimeType, webContentLink").Do()
-//	if err != nil {
-//		return nil, "", err
-//	}
-//	log.Println("webContentLink",file.WebContentLink)
-//
-//	log.Println("https://drive.google.com/uc?export=download&amp;confirm=MEBm&amp;id="+file.Id)
-//	accessToken, err := d.Config.TokenSource(oauth2.NoContext).Token()
-//	if err != nil {
-//		return nil, "", err
-//	}
-//	log.Println("accessToken.AccessToken", accessToken.AccessToken)
-//	fileUrl := fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s?alt=media&prettyPrint=false&access_token=%s",
-//		fileId, accessToken.AccessToken)
-//
-//	log.Println("fileUrl", fileUrl)
-//
-//	client := &http.Client{
-//		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-//			return RedirectAttemptedError
-//		},
-//>>>>>>> Stashed changes
-//	}
-//	res, err := d.Service.Files.Get(fileId).Download()
-//
-//	if err == nil {
-//		log.Println(res.Request.URL.String(), res.Request.UserAgent())
-//		log.Println(res.Request.Header)
-//
-//		defer res.Body.Close()
-//	}
-//	return file, &DownloadDetails{
-//		Link: res.Request.URL.String(),
-//		UserAgent: res.Request.UserAgent(),
-//		Token: strings.TrimPrefix(res.Request.Header.Get("Authorization"), "Bearer "),
-//		XApiClient: res.Request.Header.Get("X-Goog-Api-Client"),
-//	}, nil
-//}
-
 func (d *DriveService) DownloadFile(fileId string) (details *DownloadDetails, err error) {
 	_, err = d.Service.Files.
 		Get(fileId).
@@ -220,12 +172,12 @@ func (d *DriveService) GetDownloadLink(fileId string) (*drive.File, *DownloadDet
 	}
 	res, err := d.Service.Files.Get(fileId).Download()
 
-	if err == nil {
-		log.Println(res.Request.URL.String(), res.Request.UserAgent())
-		log.Println(res.Request.Header)
-
-		defer res.Body.Close()
+	if err != nil {
+		return nil, nil, err
 	}
+	defer res.Body.Close()
+	log.Println(res.Request.URL.String(), res.Request.UserAgent())
+	log.Println(res.Request.Header)
 	return file, &DownloadDetails{
 		Link:       res.Request.URL.String(),
 		UserAgent:  res.Request.UserAgent(),
@@ -268,7 +220,7 @@ func (d *DriveService) GetSharableLink(fileId string) (*drive.File, string, erro
 }
 
 func (d *DriveService) GetAccessToken() (string, error) {
-	token, err := d.Config.TokenSource(oauth2.NoContext).Token()
+	token, err := d.Config.TokenSource(context.Background()).Token()
 	if err != nil {
 		return "", err
 	}
