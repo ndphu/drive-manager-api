@@ -10,6 +10,7 @@ import (
 	"github.com/globalsign/mgo/bson"
 	"log"
 )
+
 func main() {
 
 	r := gin.Default()
@@ -23,6 +24,7 @@ func main() {
 	r.Use(cors.New(c))
 
 	api := r.Group("/api")
+	controller.ConfigController(api.Group("/config"))
 	controller.AccountController(api.Group("/manage"))
 	controller.SearchController(api.Group("/search"))
 	controller.UserController(api.Group("/user"))
@@ -40,7 +42,7 @@ func main() {
 	r.Run()
 }
 
-func updateProjects()  {
+func updateProjects() {
 	accounts := make([]entity.DriveAccount, 0)
 	dao.Collection("drive_account").Find(bson.M{
 		"projectId": bson.ObjectIdHex("5c709c76a88fb50ed0843d4b"),
@@ -49,7 +51,7 @@ func updateProjects()  {
 	for _, account := range accounts {
 		log.Println(account.Name)
 		account.ProjectId = bson.ObjectIdHex("5c70a0eca88fb51da4b59611")
-		if err:=dao.Collection("drive_account").UpdateId(account.Id, &account); err != nil {
+		if err := dao.Collection("drive_account").UpdateId(account.Id, &account); err != nil {
 			log.Println("fail to update", account.Name)
 		} else {
 			log.Println("updated", account.Name)
