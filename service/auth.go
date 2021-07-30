@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
+	"drive-manager-api/dao"
+	"drive-manager-api/entity"
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/globalsign/mgo/bson"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
 	"github.com/nu7hatch/gouuid"
 	"google.golang.org/api/option"
 	"log"
@@ -62,6 +62,10 @@ func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(os.Getenv("TOKEN_SECRET")), nil
 	})
+	if err != nil {
+		log.Println("Fail to parse jwt token by error", err.Error())
+		return nil, err
+	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		_roles := claims["roles"].([]interface{})
 		roles := make([]string, len(_roles))

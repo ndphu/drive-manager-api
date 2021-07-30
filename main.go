@@ -5,6 +5,7 @@ import (
 	"drive-manager-api/dao"
 	"drive-manager-api/entity"
 	"drive-manager-api/middleware"
+	"drive-manager-api/service"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,8 @@ func main() {
 	c.AllowCredentials = true
 	c.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	c.AllowHeaders = []string{"Origin", "Authorization", "Content-Type", "Content-Length", "X-Requested-With", "Authorization"}
+
+	//doSync()
 
 	r.Use(cors.New(c))
 
@@ -46,6 +49,23 @@ func main() {
 		c.JSON(200, gin.H{"status": "OK"})
 	})
 	r.Run()
+}
+
+func doSync() {
+	var projects []entity.Project
+	if err := dao.Collection("project").Find(nil).All(&projects); err != nil {
+		panic(err)
+	}
+	s := service.ProjectService{}
+	for _, p := range projects {
+		if p.Id.Hex() == "5c70a0eca88fb51da4b59611" {
+			continue
+		}
+		if err := s.SyncProject(p.Id.Hex(), p.Owner.Hex()); err != nil {
+			log.Println("Fail to sync project", p.Id.Hex())
+			panic(err)
+		}
+	}
 }
 
 func updateProjects() {
