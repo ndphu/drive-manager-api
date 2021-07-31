@@ -47,7 +47,7 @@ func UserController(r *gin.RouterGroup) {
 		}
 		user, err := authService.CreateUserWithEmail(ri.UserEmail, ri.Password, ri.DisplayName)
 		if err != nil {
-			ServerError("fail to create user", err, c)
+			c.AbortWithStatusJSON(500, gin.H{"error": err, "message": err.Error()})
 			return
 		}
 
