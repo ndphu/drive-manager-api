@@ -270,4 +270,16 @@ func AccountController(r *gin.RouterGroup) {
 			c.JSON(200, gin.H{"success": true, "favorite": fv})
 		}
 	})
+
+	r.POST("/account/:id/file/:fileId/sync", func(c *gin.Context) {
+		user := CurrentUser(c)
+		userId := user.Id.Hex()
+		accountId := c.Param("id")
+		fileId := c.Param("fileId")
+		if fv, err := accountService.SyncFile(userId, accountId, fileId); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"success": true, "file": fv})
+		}
+	})
 }

@@ -1,12 +1,12 @@
 package service
 
 import (
-	"github.com/ndphu/drive-manager-api/dao"
-	"github.com/ndphu/drive-manager-api/entity"
-	"github.com/ndphu/drive-manager-api/helper"
 	"encoding/json"
 	"fmt"
 	"github.com/globalsign/mgo/bson"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/helper"
 	"google.golang.org/api/drive/v3"
 	"log"
 	"strconv"
@@ -447,9 +447,9 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 }
 
 type FileFavorite struct {
-	Id        bson.ObjectId `json:"id" bson:"_id"`
-	FileId    string        `json:"fileId" bson:"fileId"`
-	UserId    bson.ObjectId `json:"userId" bson:"userId"`
+	Id     bson.ObjectId `json:"id" bson:"_id"`
+	FileId string        `json:"fileId" bson:"fileId"`
+	UserId bson.ObjectId `json:"userId" bson:"userId"`
 }
 
 func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favorite bool) (*FileFavorite, error) {
@@ -462,12 +462,59 @@ func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favor
 	}
 
 	fv := FileFavorite{
-		Id:        bson.NewObjectId(),
-		UserId:    bson.ObjectIdHex(userId),
-		FileId:    fileId,
+		Id:     bson.NewObjectId(),
+		UserId: bson.ObjectIdHex(userId),
+		FileId: fileId,
 	}
 	if err := dao.Collection("file_favorite").Insert(fv); err != nil {
 		return nil, err
 	}
 	return &fv, nil
+}
+
+func (s *AccountService) SyncFile(userId string, accountId string, fileId string) (*FileIndex, error) {
+	var existing []FileIndex
+	if err := dao.Collection("file_index").Find(bson.M{"fileId": fileId}).Limit(1).All(&existing); err != nil {
+		log.Println("SyncFile", "Fail to query if file already sync", err.Error())
+		return nil, err
+	}
+	if len(existing) > 0 {
+		log.Println("File already synchronized")
+		return &existing[0], nil
+	}
+	var acc entity.DriveAccount
+	if err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(accountId)).One(&acc); err != nil {
+		log.Println("SyncFile", "failed by error", err.Error())
+		return nil, err
+	}
+	ds, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
+		return nil, err
+	}
+	cloudFile, err := ds.GetFile(fileId)
+	if err != nil {
+		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get cloud file by error", err.Error())
+		return nil, err
+	}
+	ct, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.CreatedTime)
+	mt, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.ModifiedTime)
+	f := FileIndex{
+		Id:           bson.NewObjectId(),
+		FileId:       cloudFile.Id,
+		Name:         cloudFile.Name,
+		Size:         cloudFile.Size,
+		MimeType:     cloudFile.MimeType,
+		AccountId:    acc.Id,
+		Owner:        acc.Owner,
+		ProjectId:    acc.ProjectId,
+		CreatedTime:  ct,
+		ModifiedTime: mt,
+		SyncTime:     time.Now(),
+	}
+	if err := dao.Collection("file_index").Insert(f); err != nil {
+		log.Println("SyncFile", "Fail to insert file index by error", err.Error())
+		return nil, err
+	}
+	return &f, nil
 }

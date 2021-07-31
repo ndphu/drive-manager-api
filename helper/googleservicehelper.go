@@ -161,6 +161,13 @@ func (d *DriveService) DownloadFile(fileId string) (details *DownloadDetails, er
 	}
 }
 
+func (d*DriveService) GetFile(fileId string) (*drive.File, error) {
+	return d.Service.Files.
+		Get(fileId).
+		Fields("id, name, size, mimeType, webContentLink, webViewLink, shared").
+		Do()
+}
+
 func (d *DriveService) GetDownloadLink(fileId string) (*drive.File, *DownloadDetails, error) {
 	file, err := d.Service.Files.
 		Get(fileId).
