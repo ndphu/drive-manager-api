@@ -1,12 +1,12 @@
 package controller
 
 import (
-	"drive-manager-api/service"
+	"github.com/ndphu/drive-manager-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
-	"drive-manager-api/middleware"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/middleware"
 	"sync"
 )
 

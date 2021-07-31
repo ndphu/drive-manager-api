@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"drive-manager-api/service"
+	"github.com/ndphu/drive-manager-api/service"
 	"github.com/gin-gonic/gin"
 	"strings"
 )

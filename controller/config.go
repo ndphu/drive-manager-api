@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/gin-gonic/gin"
 )
 

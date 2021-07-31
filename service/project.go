@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
-	"drive-manager-api/helper"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/helper"
 	"encoding/base64"
 	"encoding/json"
 	"errors"

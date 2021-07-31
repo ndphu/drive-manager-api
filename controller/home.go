@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"drive-manager-api/dao"
-	"drive-manager-api/service"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
 )

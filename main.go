@@ -1,15 +1,15 @@
 package main
 
 import (
-	"drive-manager-api/controller"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
-	"drive-manager-api/middleware"
-	"drive-manager-api/service"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo/bson"
+	"github.com/ndphu/drive-manager-api/controller"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/middleware"
+	"github.com/ndphu/drive-manager-api/service"
 	"log"
 )
 
@@ -21,7 +21,7 @@ func main() {
 	c.AllowAllOrigins = true
 	c.AllowCredentials = true
 	c.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
-	c.AllowHeaders = []string{"Origin", "Authorization", "Content-Type", "Content-Length", "X-Requested-With", "Authorization"}
+	c.AllowHeaders = []string{"Origin", "Authorization", "Content-Type", "Content-Length", "X-Requested-With", "Authorization", "X-Config-Api-Key"}
 
 	//doSync()
 

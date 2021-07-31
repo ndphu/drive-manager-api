@@ -2,9 +2,9 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
-	"drive-manager-api/middleware"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/middleware"
 )
 
 func AdminController(r *gin.RouterGroup) error {

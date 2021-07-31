@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/entity"
 	"log"
 )
 

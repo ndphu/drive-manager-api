@@ -1,11 +1,11 @@
 package controller
 
 import (
-	"drive-manager-api/entity"
-	"drive-manager-api/helper"
-	"drive-manager-api/middleware"
-	"drive-manager-api/service"
-	"drive-manager-api/utils"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/helper"
+	"github.com/ndphu/drive-manager-api/middleware"
+	"github.com/ndphu/drive-manager-api/service"
+	"github.com/ndphu/drive-manager-api/utils"
 	"encoding/base64"
 	"fmt"
 	"github.com/gin-gonic/gin"

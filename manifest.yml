@@ -1,8 +1,0 @@
----
-applications:
-- name: drive-manager-api
-  memory: 24M
-  instances: 1
-  command: drive-manager-api
-  random-route: true
-

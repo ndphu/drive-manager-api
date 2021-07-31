@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"drive-manager-api/dao"
-	"drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
