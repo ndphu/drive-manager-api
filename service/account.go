@@ -445,3 +445,29 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 	return nil
 
 }
+
+type FileFavorite struct {
+	Id        bson.ObjectId `json:"id" bson:"_id"`
+	FileId    string        `json:"fileId" bson:"fileId"`
+	UserId    bson.ObjectId `json:"userId" bson:"userId"`
+}
+
+func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favorite bool) (*FileFavorite, error) {
+	var existing FileFavorite
+	if err := dao.Collection("file_favorite").Find(bson.M{
+		"fileId": fileId,
+		"userId": bson.ObjectIdHex(userId),
+	}).One(&existing); err == nil {
+		return &existing, nil
+	}
+
+	fv := FileFavorite{
+		Id:        bson.NewObjectId(),
+		UserId:    bson.ObjectIdHex(userId),
+		FileId:    fileId,
+	}
+	if err := dao.Collection("file_favorite").Insert(fv); err != nil {
+		return nil, err
+	}
+	return &fv, nil
+}

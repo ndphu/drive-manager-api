@@ -23,7 +23,7 @@ func StreamController(r *gin.RouterGroup) error {
 			return
 		}
 
-		stream(c, url, authCookie)
+		//stream(c, url, authCookie)
 	})
 
 	return nil
