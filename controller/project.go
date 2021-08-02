@@ -150,6 +150,27 @@ func ProjectController(r *gin.RouterGroup) {
 		}
 
 	})
+
+	r.POST("/project/:id/sync", func(c *gin.Context) {
+		user := CurrentUser(c)
+		projectId := c.Param("id")
+		if count, err := dao.Collection("project").Find(bson.M{
+			"_id":   bson.ObjectIdHex(projectId),
+			"owner": user.Id,
+		}).Count(); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		} else {
+			if count == 0 {
+				c.JSON(404, gin.H{"error": "project not found"})
+			} else {
+				if err := s.SyncProjectWithGoogle(projectId); err != nil {
+					c.AbortWithStatusJSON(500, gin.H{"error": "fail to sync project by error" + err.Error()})
+				} else {
+					c.JSON(200, gin.H{"success": true})
+				}
+			}
+		}
+	})
 }
 
 func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {

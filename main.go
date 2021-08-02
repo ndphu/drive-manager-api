@@ -42,6 +42,8 @@ func main() {
 	controller.ViewController(manage.Group("/view"))
 	controller.SyncController(manage.Group("/sync"))
 	controller.HomeController(manage.Group("/home"))
+	controller.UploadController(manage.Group("/upload"))
+	controller.BrowseController(manage.Group("/browse"))
 
 	//updateProjects()
 

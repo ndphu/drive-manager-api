@@ -309,7 +309,7 @@ func (s *AccountService) GetAccessToken(acc *entity.DriveAccount) (string, error
 }
 
 func (s *AccountService) CreateServiceAccount(projectId string, userId string) (*entity.DriveAccount, error) {
-	admin, err := s.FindAdminAccount(projectId, userId)
+	admin, err := s.FindAdminAccount(projectId)
 	if err != nil {
 		log.Println("Unable to find admin account for this project by error", err.Error())
 		return nil, err
@@ -361,11 +361,10 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 	return acc, nil
 }
 
-func (s *AccountService) FindAdminAccount(projectId string, userId string) (*entity.DriveAccount, error) {
+func (s *AccountService) FindAdminAccount(projectId string) (*entity.DriveAccount, error) {
 	var admin entity.DriveAccount
 	if err := dao.Collection("drive_account").Find(bson.M{
 		"projectId": bson.ObjectIdHex(projectId),
-		"owner":     bson.ObjectIdHex(userId),
 		"type":      "service_account_admin",
 	}).One(&admin); err != nil {
 		return nil, err
@@ -394,12 +393,10 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 		return err
 	}
 
-	if info, err := dao.Collection("file_index").RemoveAll(bson.M{
+	if _, err := dao.Collection("file_index").RemoveAll(bson.M{
 		"accountId": acc.Id,
 	}); err != nil {
 		log.Println("Fail to remove old files index")
-	} else {
-		log.Printf("Change info %v\n", info)
 	}
 
 	page := 1
@@ -436,7 +433,6 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 		}
 
 		if len(files) < size {
-			log.Println("Account", acc.Id.Hex(), "Looped to all file")
 			break
 		}
 		page = page + 1
@@ -517,4 +513,19 @@ func (s *AccountService) SyncFile(userId string, accountId string, fileId string
 		return nil, err
 	}
 	return &f, nil
+}
+
+func (s *AccountService) ListFile(accountId string) ([]*helper.File, error) {
+	acc, err := s.FindAccount(accountId)
+	if err != nil {
+		return nil, err
+	}
+	ds, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
+		return nil, err
+	}
+
+	//accountService.FindAdminAccount()
+	return ds.ListFiles(1, 1000)
 }

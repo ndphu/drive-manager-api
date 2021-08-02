@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"github.com/ndphu/drive-manager-api/dao"
-	"github.com/ndphu/drive-manager-api/entity"
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/globalsign/mgo/bson"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/nu7hatch/gouuid"
 	"google.golang.org/api/option"
 	"log"
@@ -17,7 +17,8 @@ import (
 )
 
 type AuthService struct {
-	App *firebase.App
+	App         *firebase.App
+	TokenSecret []byte
 }
 
 type FirebaseAccount struct {
@@ -29,6 +30,12 @@ type FirebaseAccount struct {
 var authService *AuthService
 
 func GetAuthService() (*AuthService, error) {
+	tokenSecret := os.Getenv("TOKEN_SECRET")
+	if tokenSecret == "" {
+		//return nil, errors.New("NoTokenSecret")
+		panic("No Token Secret")
+	}
+
 	if authService == nil {
 		adminAccount := FirebaseAccount{}
 		err := dao.Collection("firebase_admin").Find(nil).One(&adminAccount)
@@ -49,6 +56,7 @@ func GetAuthService() (*AuthService, error) {
 
 		authService = &AuthService{
 			App: app,
+			TokenSecret: []byte(tokenSecret),
 		}
 	}
 	return authService, nil
@@ -60,7 +68,7 @@ func (s *AuthService) getAuthClient() (*auth.Client, error) {
 
 func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("TOKEN_SECRET")), nil
+		return s.TokenSecret, nil
 	})
 	if err != nil {
 		log.Println("Fail to parse jwt token by error", err.Error())
@@ -147,7 +155,7 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		"provider":     "Firebase",
 		"type":         "login_token",
 	})
-	jwtTokenString, err := jwtToken.SignedString([]byte(os.Getenv("TOKEN_SECRET")))
+	jwtTokenString, err := jwtToken.SignedString(s.TokenSecret)
 	return &user, jwtTokenString, err
 }
 
@@ -166,7 +174,7 @@ func (s *AuthService) NewServiceToken(user *entity.User) (*entity.ServiceToken, 
 		"type":       "service_token",
 		"token_id":   tokenId.String(),
 	})
-	token, err := jwtToken.SignedString([]byte(os.Getenv("TOKEN_SECRET")))
+	token, err := jwtToken.SignedString(s.TokenSecret)
 	if err != nil {
 		return nil, err
 	}

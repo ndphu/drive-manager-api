@@ -1,16 +1,16 @@
 package controller
 
 import (
-	"github.com/ndphu/drive-manager-api/entity"
-	"github.com/ndphu/drive-manager-api/helper"
-	"github.com/ndphu/drive-manager-api/middleware"
-	"github.com/ndphu/drive-manager-api/service"
-	"github.com/ndphu/drive-manager-api/utils"
 	"encoding/base64"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/helper"
+	"github.com/ndphu/drive-manager-api/middleware"
+	"github.com/ndphu/drive-manager-api/service"
+	"github.com/ndphu/drive-manager-api/utils"
 	"strconv"
 )
 
@@ -32,7 +32,7 @@ func AccountController(r *gin.RouterGroup) {
 			return
 		}
 
-		driveService, err := helper.GetDriveService([]byte(keyDecoded))
+		driveService, err := helper.GetDriveService(keyDecoded)
 		if err != nil {
 			BadRequest("Invalid JSON Key", err, c)
 			return
@@ -148,7 +148,6 @@ func AccountController(r *gin.RouterGroup) {
 			ServerError("Fail to list file", err, c)
 			return
 		}
-		// TODO
 		for _, f := range files {
 			f.AccountId = accountId
 		}

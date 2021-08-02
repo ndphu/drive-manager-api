@@ -2,14 +2,14 @@ package service
 
 import (
 	"context"
-	"github.com/ndphu/drive-manager-api/dao"
-	"github.com/ndphu/drive-manager-api/entity"
-	"github.com/ndphu/drive-manager-api/helper"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/globalsign/mgo/bson"
 	"github.com/globalsign/mgo/txn"
+	"github.com/ndphu/drive-manager-api/dao"
+	"github.com/ndphu/drive-manager-api/entity"
+	"github.com/ndphu/drive-manager-api/helper"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -195,26 +195,210 @@ func (s *ProjectService) SyncProject(projectId string, userId string) error {
 	var p entity.Project
 	if err := dao.Collection("project").
 		Find(bson.M{"_id": bson.ObjectIdHex(projectId), "owner": bson.ObjectIdHex(userId)}).One(&p);
-	 err != nil {
-	 	log.Println("Fail to find project to perform sync by error", err.Error())
-	 	return err
+		err != nil {
+		log.Println("Fail to find project to perform sync by error", err.Error())
+		return err
 	}
 	var accList []entity.DriveAccount
-	 if err := dao.Collection("drive_account").Find(bson.M{
-	 	"projectId": bson.ObjectIdHex(projectId),
-	 	"owner": bson.ObjectIdHex(userId),
-	 }).All(&accList); err != nil {
-	 	log.Println("Fail to get account list by error", err.Error())
-	 	return err
-	 }
+	if err := dao.Collection("drive_account").Find(bson.M{
+		"projectId": bson.ObjectIdHex(projectId),
+		"owner":     bson.ObjectIdHex(userId),
+	}).All(&accList); err != nil {
+		log.Println("Fail to get account list by error", err.Error())
+		return err
+	}
 
-	 for _, acc := range accList {
-		 if err := accountService.IndexAccountFiles(acc); err != nil {
-		 	log.Println("Fail to sync account", acc.Id.Hex(), "by error", err.Error())
-		 }
-	 }
-	 // TODO: should aggregate error here!
-	 return nil
+	for _, acc := range accList {
+		if err := accountService.IndexAccountFiles(acc); err != nil {
+			log.Println("Fail to sync account", acc.Id.Hex(), "by error", err.Error())
+		}
+	}
+	// TODO: should aggregate error here!
+	return nil
+}
+
+func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, error) {
+	var p entity.Project
+	if err := dao.Collection("project").
+		Find(bson.M{"_id": bson.ObjectIdHex(projectId)}).One(&p);
+		err != nil {
+		log.Println("No project found for id", projectId)
+		return nil, err
+	}
+
+	var key []byte
+	var admin entity.DriveAccount
+	if err := dao.Collection("drive_account").Find(bson.M{
+		"projectId": bson.ObjectIdHex(projectId),
+		"type":      "service_account_admin",
+	}).One(&admin); err != nil {
+		log.Println("No admin account for project", projectId)
+		key = []byte(p.AdminKey)
+	} else {
+		key = []byte(admin.Key)
+	}
+
+	is, err := helper.NewIamService(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return is.ListServiceAccounts(p.ProjectId)
+}
+
+func (s *ProjectService) DeleteProject(projectId string) error {
+	log.Println("Deleting project", projectId)
+	pid := bson.ObjectIdHex(projectId)
+	if ci, err := dao.Collection("file_index").RemoveAll(bson.M{
+		"projectId": pid,
+	}); err != nil {
+		log.Println("Fail to delete file indexes by error", err.Error())
+		return err
+	} else {
+		log.Println("Deleted {} file_index records", ci.Removed)
+	}
+	if ci, err := dao.Collection("drive_account").RemoveAll(bson.M{
+		"projectId": pid,
+	}); err != nil {
+		log.Println("Fail to delete drive accounts by error", err.Error())
+		return err
+	} else {
+		log.Println("Deleted {} drive_account records", ci.Removed)
+	}
+	if ci, err := dao.Collection("project").RemoveAll(bson.M{
+		"_id": pid,
+	}); err != nil {
+		log.Println("Fail to delete drive accounts by error", err.Error())
+		return err
+	} else {
+		log.Println("Deleted {} drive_account records", ci.Removed)
+	}
+	log.Println("Successfully deleted project", pid.Hex())
+	return nil
+}
+
+func (s *ProjectService) SyncProjectWithGoogle(projectId string) error {
+	proj, err := s.GetProject(projectId)
+	if err != nil {
+		log.Println("Project not found by error", err.Error())
+		return err
+	}
+
+	if ci, err := dao.Collection("file_index").RemoveAll(bson.M{
+		"projectId": proj.Id,
+	}); err != nil {
+		log.Println("Fail to delete file indexes by error", err.Error())
+		return err
+	} else {
+		log.Println("Deleted {} file_index records", ci.Removed)
+	}
+	if ci, err := dao.Collection("drive_account").RemoveAll(bson.M{
+		"projectId": proj.Id,
+		"type":      "service_account",
+	}); err != nil {
+		log.Println("Fail to delete drive accounts by error", err.Error())
+		return err
+	} else {
+		log.Println("Deleted {} drive_account records", ci.Removed)
+	}
+
+	is, err := s.GetIamService(proj)
+	if err != nil {
+		log.Println("Fail to get iam service for proj", projectId, "by error", err.Error())
+		return err
+	}
+	remoteAccounts, err := is.ListServiceAccounts(proj.ProjectId)
+	if err != nil {
+		log.Println("Fail to get service accounts for proj", projectId)
+		return err
+	}
+	for idx, acc := range remoteAccounts {
+		if acc.UniqueId == is.KeyDetails.ClientId {
+			log.Println("Ignore admin account", acc.UniqueId)
+			continue
+		}
+
+		if err := is.RemoveExistingKeys(acc); err != nil {
+			log.Println("No account key exists for service account", acc.Name)
+		}
+		key, err := is.CreateServiceAccountKey(acc)
+		if err != nil {
+			log.Println("Fail to create service account key by error", err.Error())
+			return err
+		}
+		if en, err := s.InsertDriveAccount(proj, acc, key); err != nil {
+			log.Println("Fail to insert drive account by error", err.Error())
+			return err
+		} else {
+			if err := accountService.IndexAccountFiles(*en); err != nil {
+				log.Println("Fail to index account's files by error", err.Error())
+			}
+		}
+		log.Println("Synchronized", idx+1, "of", len(remoteAccounts), "accounts")
+	}
+
+	return nil
+}
+
+func (s *ProjectService) InsertDriveAccount(proj *entity.Project, sa *iam.ServiceAccount, key []byte) (*entity.DriveAccount, error) {
+	newAcc := entity.DriveAccount{}
+	if err := accountService.InitializeKey(&newAcc, key); err != nil {
+		log.Println("Fail to parse service account key file by error", err.Error())
+		return nil, err
+	}
+	newAcc.Name = sa.DisplayName
+	newAcc.Owner = proj.Owner
+	newAcc.ProjectId = proj.Id
+	newAcc.Key = string(key)
+
+	srv, err := helper.GetDriveService(key)
+	if err != nil {
+		log.Println("Fail to get drive service from account key by error", err.Error())
+		return nil, err
+	}
+	tries := 0
+	for {
+		tries++
+		quota, err := srv.GetQuotaUsage()
+		if err != nil {
+			time.Sleep(2 * time.Second)
+		} else {
+			newAcc.Usage = quota.Usage
+			newAcc.Limit = quota.Limit
+			newAcc.QuotaUpdateTimestamp = time.Now()
+			break
+		}
+		if tries >= 30 {
+			log.Println("Account may not ready at this moment. Tries:", tries)
+			return nil, err
+		}
+	}
+
+	if err := accountService.Save(&newAcc); err != nil {
+		log.Println("Fail to save new service account to DB by error", err.Error())
+		return nil, err
+	}
+	return &newAcc, nil
+}
+
+func (s *ProjectService) GetProject(id string) (*entity.Project, error) {
+	var p entity.Project
+	if err := dao.Collection("project").FindId(bson.ObjectIdHex(id)).One(&p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (s *ProjectService) GetIamService(project *entity.Project) (*helper.IamService, error) {
+	if project.AdminKey != "" {
+		return helper.NewIamService([]byte(project.AdminKey))
+	}
+	account, err := accountService.FindAdminAccount(project.Id.Hex())
+	if err != nil {
+		log.Println("No admin account found for project", project.Id.Hex())
+		return nil, err
+	}
+	return helper.NewIamService([]byte(account.Key))
 }
 
 func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) {
@@ -227,7 +411,7 @@ func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Projec
 
 func createServiceAccountAutomate(iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) error {
 	accountName := "sa-" + strconv.FormatInt(time.Now().Unix()+int64(rand.Intn(100000)), 16)
-	account, err := createServiceAccount(iamSrv, project.ProjectId, accountName, "automate account "+accountName)
+	account, err := createServiceAccount(iamSrv, project.ProjectId, accountName, accountName)
 	if err != nil {
 		// TODO: write provision_event FAIL TO CREATE SERVICE ACCOUNT
 		log.Println("Fail to create service account by error", err.Error())
@@ -258,10 +442,11 @@ func createServiceAccountAutomate(iamSrv *iam.Service, project *entity.Project, 
 	tries := 0
 	for {
 		tries++
+		log.Println("Retrieving quota usage for account", newAcc.ClientId)
 		quota, err := srv.GetQuotaUsage()
 		if err != nil {
-			log.Println("Account may not ready at this moment. Tries:", tries)
-			time.Sleep(5 * time.Second)
+			log.Println("Account may not ready at this moment. Error=", err.Error(), ". Tries:", tries)
+			time.Sleep(2 * time.Second)
 		} else {
 			log.Println("Account is now available")
 			newAcc.Usage = quota.Usage

@@ -28,6 +28,7 @@ type File struct {
 	AccountId    string `json:"accountId"`
 	CreatedTime  string `json:"createdTime"`
 	ModifiedTime string `json:"modifiedTime"`
+	FileId       string `json:"fileId"`
 }
 
 type DriveService struct {
@@ -111,6 +112,7 @@ func (d *DriveService) retrieveFiles(pageToken string, size int64) ([]*File, err
 	for i, file := range r.Files {
 		files[i] = &File{
 			Id:           file.Id,
+			FileId:       file.Id,
 			Name:         file.Name,
 			Size:         file.Size,
 			MimeType:     file.MimeType,
@@ -161,7 +163,7 @@ func (d *DriveService) DownloadFile(fileId string) (details *DownloadDetails, er
 	}
 }
 
-func (d*DriveService) GetFile(fileId string) (*drive.File, error) {
+func (d *DriveService) GetFile(fileId string) (*drive.File, error) {
 	return d.Service.Files.
 		Get(fileId).
 		Fields("id, name, size, mimeType, webContentLink, webViewLink, shared").
