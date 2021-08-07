@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt"
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
@@ -55,7 +55,7 @@ func GetAuthService() (*AuthService, error) {
 		}
 
 		authService = &AuthService{
-			App: app,
+			App:         app,
 			TokenSecret: []byte(tokenSecret),
 		}
 	}
@@ -68,17 +68,22 @@ func (s *AuthService) getAuthClient() (*auth.Client, error) {
 
 func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+		mapClaims := token.Claims.(jwt.MapClaims)
+		delete(mapClaims, "iat")
 		return s.TokenSecret, nil
 	})
 	if err != nil {
-		log.Println("Fail to parse jwt token by error", err.Error())
+		log.Println("Fail to parse jwt token by error:", err.Error())
 		return nil, err
 	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		_roles := claims["roles"].([]interface{})
-		roles := make([]string, len(_roles))
-		for i, role := range _roles {
-			roles[i] = role.(string)
+		roles := make([]string, 0)
+		claimRoles, exist := claims["roles"]
+		if exist {
+			_roles := claimRoles.([]interface{})
+			for _, role := range _roles {
+				roles = append(roles, role.(string))
+			}
 		}
 
 		return &entity.User{
@@ -167,12 +172,13 @@ func (s *AuthService) NewServiceToken(user *entity.User) (*entity.ServiceToken, 
 
 	now := time.Now()
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iat":        now.Unix(),
-		"exp":        now.AddDate(1, 0, 0).Unix(),
-		"user_id":    user.Id.Hex(),
-		"user_email": user.Email,
-		"type":       "service_token",
-		"token_id":   tokenId.String(),
+		"iat":          now.Unix(),
+		"exp":          now.AddDate(1, 0, 0).Unix(),
+		"user_id":      user.Id.Hex(),
+		"user_email":   user.Email,
+		"display_name": user.DisplayName,
+		"type":         "service_token",
+		"token_id":     tokenId.String(),
 	})
 	token, err := jwtToken.SignedString(s.TokenSecret)
 	if err != nil {

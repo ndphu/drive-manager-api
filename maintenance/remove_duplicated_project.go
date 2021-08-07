@@ -35,7 +35,8 @@ func main() {
 	//deleteProjectByGoogleId(projectId)
 
 	// project ID
-	projectId := "5c6d7d5fa88fb526241d200c"
+	//projectId := "5c6d7d5fa88fb526241d200c"
+	projectId := "61090a5da88fb508e8936cd5"
 
 	//projectService.DeleteProject(projectId)
 	if err := projectService.SyncProjectWithGoogle(projectId); err != nil {

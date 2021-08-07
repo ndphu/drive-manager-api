@@ -401,6 +401,22 @@ func (s *ProjectService) GetIamService(project *entity.Project) (*helper.IamServ
 	return helper.NewIamService([]byte(account.Key))
 }
 
+func (s *ProjectService) SyncProjectQuota(projectId string) error {
+	var accounts []entity.DriveAccount
+	if err := dao.Collection("drive_account").Find(bson.M{
+		"projectId": bson.ObjectIdHex(projectId),
+	}).All(&accounts); err != nil {
+		return err
+	}
+	as := GetAccountService()
+	for _, account := range accounts {
+		if err := as.UpdateCachedQuotaByAccountId(account.Id.Hex()); err != nil {
+			log.Println("Fail to update quota for account", account.Id.Hex())
+		}
+	}
+	return nil
+}
+
 func worker(id int, jobs <-chan int, iamSrv *iam.Service, project *entity.Project, accSrv *AccountService) {
 	log.Println("started worker", id)
 	for i := range jobs {

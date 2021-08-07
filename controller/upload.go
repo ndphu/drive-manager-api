@@ -30,11 +30,13 @@ func UploadController(r *gin.RouterGroup) {
 			return
 		}
 		var accounts []entity.DriveAccount
+		uploadBuffer := int64(1073741824)
 		if err := dao.Collection("drive_account").
 			Find(
 				bson.M{
-					"owner": user.Id,
-					"type":  "service_account",
+					"owner":     user.Id,
+					"type":      "service_account",
+					"available": bson.M{"$gt": ur.Size + uploadBuffer},
 				}).
 			Select(
 				bson.M{
@@ -42,6 +44,7 @@ func UploadController(r *gin.RouterGroup) {
 					"key":       1,
 					"projectId": 1,
 					"usage":     1,
+					"available": 1,
 					"limit":     1,
 				}).
 			All(&accounts); err != nil {
@@ -60,7 +63,7 @@ func UploadController(r *gin.RouterGroup) {
 				c.JSON(200, gin.H{
 					"uploadInfo": UploadResponse{
 						AccessToken: token,
-						AccountId: account.Id.Hex(),
+						AccountId:   account.Id.Hex(),
 					},
 				})
 				return

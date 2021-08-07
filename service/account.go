@@ -158,6 +158,15 @@ func (s *AccountService) UpdateKey(id string, key []byte) error {
 	}
 	return dao.Collection("drive_account").UpdateId(bson.ObjectIdHex(id), &acc)
 }
+
+func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
+	var acc entity.DriveAccount
+	if err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(accountId)).One(&acc); err != nil {
+		return err
+	}
+	return s.UpdateCachedQuota(&acc)
+}
+
 func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 	driveService, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
@@ -170,6 +179,7 @@ func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 	updatedAt := time.Now()
 	acc.Usage = quota.Usage
 	acc.Limit = quota.Limit
+	acc.Available = quota.Limit - quota.Usage
 	acc.QuotaUpdateTimestamp = updatedAt
 	return dao.Collection("drive_account").Update(
 		bson.M{"_id": acc.Id},
@@ -177,6 +187,7 @@ func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 			"$set": bson.M{
 				"usage":                quota.Usage,
 				"limit":                quota.Limit,
+				"available":            quota.Limit - quota.Usage,
 				"quotaUpdateTimestamp": updatedAt,
 			},
 		})
@@ -338,7 +349,6 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 		log.Println("Fail to generate service account key file by error", err.Error())
 		return nil, err
 	}
-
 	acc := &entity.DriveAccount{
 		Id:                   bson.NewObjectId(),
 		Name:                 serviceAccountId,
@@ -357,6 +367,8 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 	if err := dao.Collection("drive_account").Insert(acc); err != nil {
 		return nil, err
 	}
+
+	go s.UpdateCachedQuotaByAccountId(acc.Id.Hex())
 
 	return acc, nil
 }

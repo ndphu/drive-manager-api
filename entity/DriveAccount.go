@@ -14,6 +14,7 @@ type DriveAccount struct {
 	ClientId             string        `json:"clientId" bson:"clientId"`
 	Key                  string        `json:"key,omitempty" bson:"key"`
 	Usage                int64         `json:"usage" bson:"usage"`
+	Available            int64         `json:"available" bson:"available"`
 	Limit                int64         `json:"limit" bson:"limit"`
 	Owner                bson.ObjectId `json:"owner" bson:"owner"`
 	ProjectId            bson.ObjectId `json:"projectId" bson:"projectId"`

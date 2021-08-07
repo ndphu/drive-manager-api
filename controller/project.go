@@ -1,11 +1,11 @@
 package controller
 
 import (
+	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/service"
-	"github.com/gin-gonic/gin"
-	"github.com/globalsign/mgo/bson"
 	"io/ioutil"
 	"log"
 	"strconv"
@@ -63,6 +63,21 @@ func ProjectController(r *gin.RouterGroup) {
 		}
 	})
 
+	r.DELETE("/project/:id", func(c *gin.Context) {
+		user := CurrentUser(c)
+		projectId := c.Param("id")
+		p, _ := s.GetProject(projectId)
+		if p.Owner.Hex() != user.Id.Hex() {
+			c.AbortWithStatusJSON(403, gin.H{"error": "project not found"})
+			return
+		}
+		if err := s.DeleteProject(projectId); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"success": true})
+	})
+
 	r.GET("/project/:id", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
@@ -93,15 +108,35 @@ func ProjectController(r *gin.RouterGroup) {
 	r.POST("/project/:id/newAccount", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
-		log.Println("Adding new account(s) for project", projectId)
-		account, err := accountService.CreateServiceAccount(projectId, user.Id.Hex())
+		count, err := strconv.Atoi(c.Query("count"))
 		if err != nil {
+			count = 1
+		}
+		log.Println("Adding", count, "new account(s) for project", projectId)
+		accounts := make([]*entity.DriveAccount, 0)
+		for i := 0; i < count; i++ {
+			if account, err := accountService.CreateServiceAccount(projectId, user.Id.Hex()); err != nil {
+				break
+			} else {
+				account.Key = ""
+				accounts = append(accounts, account)
+			}
+		}
+		c.JSON(200, gin.H{
+			"success":  true,
+			"accounts": accounts,
+		})
+	})
+
+	r.POST("/project/:id/syncQuota", func(c *gin.Context) {
+		//user := CurrentUser(c)
+		projectId := c.Param("id")
+		// TODO check permission
+		if err := s.SyncProjectQuota(projectId); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
-			account.Key = ""
 			c.JSON(200, gin.H{
 				"success": true,
-				"account": account,
 			})
 		}
 	})

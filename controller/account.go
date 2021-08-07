@@ -278,7 +278,11 @@ func AccountController(r *gin.RouterGroup) {
 		if fv, err := accountService.SyncFile(userId, accountId, fileId); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
-			c.JSON(200, gin.H{"success": true, "file": fv})
+			if err := accountService.UpdateCachedQuotaByAccountId(accountId); err != nil {
+				c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(200, gin.H{"success": true, "file": fv})
+			}
 		}
 	})
 }
