@@ -32,32 +32,32 @@ func collection(name string, cb CollectionFunc) error {
 }
 
 func (c *C) Pipe(pipe []bson.M, result interface{}) error {
-	return collection(c.Name, func(c *mgo.Collection) error {
+	return c.Template(func(c *mgo.Collection) error {
 		return c.Pipe(pipe).All(result)
 	})
 }
 
 func (c *C) Insert(docs ...interface{}) error {
-	return collection(c.Name, func(c *mgo.Collection) error {
+	return c.Template(func(c *mgo.Collection) error {
 		return c.Insert(docs...)
 	})
 }
 
 func (c *C) FindId(id bson.ObjectId, result interface{}) error {
-	return collection(c.Name, func(col *mgo.Collection) error {
+	return c.Template(func(col *mgo.Collection) error {
 		return col.FindId(id).One(result)
 	})
 }
 
 func (c *C) FindAll(result interface{}) error {
-	return collection(c.Name, func(col *mgo.Collection) error {
+	return c.Template(func(col *mgo.Collection) error {
 		return col.Find(nil).All(result)
 	})
 }
 
 func (c *C) Find(filter bson.M, result interface{}) error {
-	return collection(c.Name, func(col *mgo.Collection) error {
-		return col.Find(filter).All(&result)
+	return c.Template(func(col *mgo.Collection) error {
+		return col.Find(filter).All(result)
 	})
 }
 
@@ -73,7 +73,7 @@ func (c *C) PipeOne(pipe []bson.M, result interface{}) error {
 
 func (c *C) FindOne(filter bson.M, result interface{}) error {
 	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(filter).One(&result)
+		return col.Find(filter).One(result)
 	})
 }
 

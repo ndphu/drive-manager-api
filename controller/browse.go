@@ -88,6 +88,7 @@ func BrowseController(r *gin.RouterGroup) {
 			condition["parent"] = nil
 		}
 		var items []Item
+		//items := make([]Item, 0)
 		if err := dao.Item().Find(condition, &items); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
