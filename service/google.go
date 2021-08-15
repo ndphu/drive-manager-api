@@ -19,12 +19,11 @@ import (
 const DefaultDriveFileFormat = "https://www.googleapis.com/drive/v3/files/%s?alt=media&prettyPrint=false"
 
 type GoogleService struct {
-
 }
 
 func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.DownloadDetails, error) {
 	var acc entity.DriveAccount
-	if err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(accountId)).One(&acc); err != nil {
+	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
 		log.Println("Fail to file drive account by error", err.Error())
 		return nil, err
 	}
@@ -54,9 +53,9 @@ func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.Downl
 		return nil, err
 	}
 	return &helper.DownloadDetails{
-		Link:       fmt.Sprintf(linkFormat, fileId),
-		Token:      token,
-		File: f,
+		Link:  fmt.Sprintf(linkFormat, fileId),
+		Token: token,
+		File:  f,
 	}, nil
 }
 
@@ -64,7 +63,7 @@ func (g *GoogleService) CreateServiceAccount(userId string, projectId string) er
 	owner := bson.ObjectIdHex(userId)
 	//pid := bson.ObjectIdHex(projectId)
 	adminAccount := entity.ServiceAccountAdmin{}
-	err := dao.Collection("service_account_admin").Find(bson.M{"userId": owner}).One(&adminAccount)
+	err := dao.ServiceAccountAdmin().FindOne(bson.M{"userId": owner},&adminAccount)
 	if err != nil {
 		return err
 	}

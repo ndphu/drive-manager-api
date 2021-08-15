@@ -41,7 +41,7 @@ func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfA
 		return nil, err
 	}
 	// validate project ID from key file should be unique
-	if count, err := dao.Collection("project").Find(bson.M{"projectId": kd.ProjectId}).Count(); err != nil {
+	if count, err := dao.Project().Count(bson.M{"projectId": kd.ProjectId}); err != nil {
 		log.Println("Fail to check key unique with database", err.Error())
 		return nil, err
 	} else if count > 0 {
@@ -96,8 +96,8 @@ func (s *ProjectService) insertProject(displayName string, key []byte, owner bso
 		Owner:       owner,
 	}
 
-	tc := dao.GetDB().C("transaction")
-	runner := txn.NewRunner(tc)
+	//tc := dao.GetDB().C("transaction")
+	//runner := txn.NewRunner(tc)
 	ops := []txn.Op{{
 		C:      "drive_account",
 		Id:     accountId,
@@ -109,10 +109,16 @@ func (s *ProjectService) insertProject(displayName string, key []byte, owner bso
 		Assert: txn.DocMissing,
 		Insert: prj,
 	}}
-	if err := runner.Run(ops, "", nil); err != nil {
+
+	if err := dao.RunTransaction(ops); err != nil {
 		return nil, nil, err
 	}
 	return &prj, &acc, nil
+
+	//if err := runner.Run(ops, "", nil); err != nil {
+	//	return nil, nil, err
+	//}
+	//return &prj, &acc, nil
 }
 
 func enableRequiredAPIs(key []byte) error {
@@ -193,17 +199,16 @@ func (s *ProjectService) ProvisionProject(project *entity.Project, adminAccount 
 
 func (s *ProjectService) SyncProject(projectId string, userId string) error {
 	var p entity.Project
-	if err := dao.Collection("project").
-		Find(bson.M{"_id": bson.ObjectIdHex(projectId), "owner": bson.ObjectIdHex(userId)}).One(&p);
+	if err := dao.Project().FindOne(bson.M{"_id": bson.ObjectIdHex(projectId), "owner": bson.ObjectIdHex(userId)}, &p);
 		err != nil {
 		log.Println("Fail to find project to perform sync by error", err.Error())
 		return err
 	}
 	var accList []entity.DriveAccount
-	if err := dao.Collection("drive_account").Find(bson.M{
+	if err := dao.DriveAccount().Find(bson.M{
 		"projectId": bson.ObjectIdHex(projectId),
 		"owner":     bson.ObjectIdHex(userId),
-	}).All(&accList); err != nil {
+	}, &accList); err != nil {
 		log.Println("Fail to get account list by error", err.Error())
 		return err
 	}
@@ -219,8 +224,7 @@ func (s *ProjectService) SyncProject(projectId string, userId string) error {
 
 func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, error) {
 	var p entity.Project
-	if err := dao.Collection("project").
-		Find(bson.M{"_id": bson.ObjectIdHex(projectId)}).One(&p);
+	if err := dao.Project().FindOne(bson.M{"_id": bson.ObjectIdHex(projectId)}, &p);
 		err != nil {
 		log.Println("No project found for id", projectId)
 		return nil, err
@@ -228,10 +232,10 @@ func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, 
 
 	var key []byte
 	var admin entity.DriveAccount
-	if err := dao.Collection("drive_account").Find(bson.M{
+	if err := dao.DriveAccount().FindOne(bson.M{
 		"projectId": bson.ObjectIdHex(projectId),
 		"type":      "service_account_admin",
-	}).One(&admin); err != nil {
+	}, &admin); err != nil {
 		log.Println("No admin account for project", projectId)
 		key = []byte(p.AdminKey)
 	} else {
@@ -249,7 +253,7 @@ func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, 
 func (s *ProjectService) DeleteProject(projectId string) error {
 	log.Println("Deleting project", projectId)
 	pid := bson.ObjectIdHex(projectId)
-	if ci, err := dao.Collection("file_index").RemoveAll(bson.M{
+	if ci, err := dao.FileIndex().RemoveAll(bson.M{
 		"projectId": pid,
 	}); err != nil {
 		log.Println("Fail to delete file indexes by error", err.Error())
@@ -257,7 +261,7 @@ func (s *ProjectService) DeleteProject(projectId string) error {
 	} else {
 		log.Println("Deleted {} file_index records", ci.Removed)
 	}
-	if ci, err := dao.Collection("drive_account").RemoveAll(bson.M{
+	if ci, err := dao.DriveAccount().RemoveAll(bson.M{
 		"projectId": pid,
 	}); err != nil {
 		log.Println("Fail to delete drive accounts by error", err.Error())
@@ -265,7 +269,7 @@ func (s *ProjectService) DeleteProject(projectId string) error {
 	} else {
 		log.Println("Deleted {} drive_account records", ci.Removed)
 	}
-	if ci, err := dao.Collection("project").RemoveAll(bson.M{
+	if ci, err := dao.Project().RemoveAll(bson.M{
 		"_id": pid,
 	}); err != nil {
 		log.Println("Fail to delete drive accounts by error", err.Error())
@@ -284,7 +288,7 @@ func (s *ProjectService) SyncProjectWithGoogle(projectId string) error {
 		return err
 	}
 
-	if ci, err := dao.Collection("file_index").RemoveAll(bson.M{
+	if ci, err := dao.FileIndex().RemoveAll(bson.M{
 		"projectId": proj.Id,
 	}); err != nil {
 		log.Println("Fail to delete file indexes by error", err.Error())
@@ -292,7 +296,7 @@ func (s *ProjectService) SyncProjectWithGoogle(projectId string) error {
 	} else {
 		log.Println("Deleted {} file_index records", ci.Removed)
 	}
-	if ci, err := dao.Collection("drive_account").RemoveAll(bson.M{
+	if ci, err := dao.DriveAccount().RemoveAll(bson.M{
 		"projectId": proj.Id,
 		"type":      "service_account",
 	}); err != nil {
@@ -383,7 +387,7 @@ func (s *ProjectService) InsertDriveAccount(proj *entity.Project, sa *iam.Servic
 
 func (s *ProjectService) GetProject(id string) (*entity.Project, error) {
 	var p entity.Project
-	if err := dao.Collection("project").FindId(bson.ObjectIdHex(id)).One(&p); err != nil {
+	if err := dao.Project().FindId(bson.ObjectIdHex(id), &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -403,9 +407,9 @@ func (s *ProjectService) GetIamService(project *entity.Project) (*helper.IamServ
 
 func (s *ProjectService) SyncProjectQuota(projectId string) error {
 	var accounts []entity.DriveAccount
-	if err := dao.Collection("drive_account").Find(bson.M{
+	if err := dao.DriveAccount().Find(bson.M{
 		"projectId": bson.ObjectIdHex(projectId),
-	}).All(&accounts); err != nil {
+	}, &accounts); err != nil {
 		return err
 	}
 	as := GetAccountService()

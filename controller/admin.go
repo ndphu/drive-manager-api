@@ -12,9 +12,9 @@ func AdminController(r *gin.RouterGroup) error {
 
 	r.GET("/users", func(c *gin.Context) {
 		users := make([]entity.User, 0)
-		err := dao.Collection("user").Find(nil).All(&users)
+		err := dao.User().FindAll(&users)
 		if err != nil {
-			ServerError("Fail to query users", err, c)
+			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 		c.JSON(200, users)

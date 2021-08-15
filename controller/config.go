@@ -17,7 +17,7 @@ type FirebaseConfig struct {
 func ConfigController(r *gin.RouterGroup) {
 	r.GET("/firebase", func(c *gin.Context) {
 		var fc FirebaseConfig
-		if err := dao.Collection("firebase_config").Find(nil).One(&fc); err != nil {
+		if err := dao.FirebaseConfig().FindOne(nil, &fc); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{"config": fc})

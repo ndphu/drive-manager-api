@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
@@ -31,25 +32,24 @@ func UploadController(r *gin.RouterGroup) {
 		}
 		var accounts []entity.DriveAccount
 		uploadBuffer := int64(1073741824)
-		session, collection := dao.CollectionWithSession("drive_account")
-		defer session.Close()
-		if err := collection.
-			Find(
+		if err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+			return col.Find(
 				bson.M{
 					"owner":     user.Id,
 					"type":      "service_account",
 					"available": bson.M{"$gt": ur.Size + uploadBuffer},
 				}).
-			Select(
-				bson.M{
-					"_id":       1,
-					"key":       1,
-					"projectId": 1,
-					"usage":     1,
-					"available": 1,
-					"limit":     1,
-				}).
-			All(&accounts); err != nil {
+				Select(
+					bson.M{
+						"_id":       1,
+						"key":       1,
+						"projectId": 1,
+						"usage":     1,
+						"available": 1,
+						"limit":     1,
+					}).
+				All(&accounts)
+		}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}

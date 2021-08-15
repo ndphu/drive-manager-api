@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
-	"github.com/golang-jwt/jwt"
 	"github.com/globalsign/mgo/bson"
+	"github.com/golang-jwt/jwt"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/nu7hatch/gouuid"
@@ -38,7 +38,7 @@ func GetAuthService() (*AuthService, error) {
 
 	if authService == nil {
 		adminAccount := FirebaseAccount{}
-		err := dao.Collection("firebase_admin").Find(nil).One(&adminAccount)
+		err := dao.FirebaseAdmin().FindOne(nil, &adminAccount)
 		if err != nil {
 			log.Fatal("fail to get Firebase Admin key")
 		}
@@ -123,8 +123,11 @@ func (s *AuthService) CreateUserWithEmail(email string, password string, display
 		Email:       u.Email,
 		Roles:       []string{"user"},
 	}
-	dao.Collection("user").Insert(&user)
-	return &user, err
+	if err := dao.User().Insert(&user); err != nil {
+		log.Println("Fail to insert user by error", err.Error())
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User, string, error) {
@@ -137,15 +140,11 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		log.Println("Fail to parse token")
 		return nil, "", err
 	}
-	user := entity.User{}
-	err = dao.Collection("user").
-		Find(
-			bson.M{
-				"email": token.Claims["email"].(string),
-			}).
-		One(&user)
-
-	if err != nil {
+	var user entity.User
+	if err := dao.User().FindOne(bson.M{
+		"email": token.Claims["email"].(string),
+	}, &user); err != nil {
+		log.Println("Fai to find user in database by error", err.Error())
 		return nil, "", err
 	}
 
@@ -193,7 +192,10 @@ func (s *AuthService) NewServiceToken(user *entity.User) (*entity.ServiceToken, 
 		TokenId:   tokenId.String(),
 	}
 
-	err = dao.Collection("service_token").Insert(&st)
+	if err := dao.ServiceToken().Insert(&st); err != nil {
+		log.Println("Fail to insert service_token by error", err.Error())
+		return nil, err
+	}
 
 	return &st, err
 }

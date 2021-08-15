@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
@@ -33,7 +34,7 @@ func ProjectController(r *gin.RouterGroup) {
 	r.GET("/projects", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projects := make([]ProjectLookup, 0)
-		if err := dao.Collection("project").Pipe([]bson.M{
+		if err := dao.Project().Pipe([]bson.M{
 			{
 				"$match": bson.M{"owner": user.Id},
 			},
@@ -56,7 +57,7 @@ func ProjectController(r *gin.RouterGroup) {
 					},
 				},
 			},
-		}).All(&projects); err != nil {
+		}, &projects); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{"projects": projects})
@@ -138,13 +139,16 @@ func ProjectController(r *gin.RouterGroup) {
 	r.GET("/project/:id/accounts", func(c *gin.Context) {
 		user := CurrentUser(c)
 		accounts := make([]entity.DriveAccount, 0)
-		if err := dao.Collection("drive_account").Find(bson.M{
-			"projectId": bson.ObjectIdHex(c.Param("id")),
-			"owner":     user.Id,
-		}).Select(bson.M{
-			"key": 0,
-		}).All(&accounts); err != nil {
-			ServerError("account not found", err, c)
+		if err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+			return col.Find(bson.M{
+				"projectId": bson.ObjectIdHex(c.Param("id")),
+				"owner":     user.Id,
+			}).Select(bson.M{
+				"key": 0,
+			}).All(&accounts)
+		}); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
+			return
 		} else {
 			c.JSON(200, accounts)
 		}
@@ -189,10 +193,10 @@ func ProjectController(r *gin.RouterGroup) {
 	r.POST("/project/:id/sync", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
-		if count, err := dao.Collection("project").Find(bson.M{
+		if count, err := dao.Project().Count(bson.M{
 			"_id":   bson.ObjectIdHex(projectId),
 			"owner": user.Id,
-		}).Count(); err != nil {
+		}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			if count == 0 {
@@ -210,7 +214,7 @@ func ProjectController(r *gin.RouterGroup) {
 
 func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {
 	var project ProjectLookup
-	if err := dao.Collection("project").Pipe([]bson.M{
+	if err := dao.Project().PipeOne([]bson.M{
 		{
 			"$match": bson.M{
 				"$and": []bson.M{
@@ -236,7 +240,7 @@ func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {
 				"as": "accounts",
 			},
 		},
-	}).One(&project); err != nil {
+	}, &project); err != nil {
 		return nil, err
 	}
 	return &project, nil

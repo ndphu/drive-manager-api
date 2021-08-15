@@ -156,7 +156,7 @@ func isEmptyProject(projectId string) bool {
 	return len(accounts) == 0
 	//
 	//var accList []entity.DriveAccount
-	//if err := dao.Collection("drive_account").Find(bson.M{"projectId": bson.ObjectIdHex(projectId)}).All(&accList); err != nil {
+	//if err := dao.Template("drive_account").Find(bson.M{"projectId": bson.ObjectIdHex(projectId)}).All(&accList); err != nil {
 	//	panic(err)
 	//}
 	//for _, account := range accList {

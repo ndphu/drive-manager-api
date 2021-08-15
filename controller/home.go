@@ -21,7 +21,7 @@ func HomeController(r *gin.RouterGroup) {
 	r.GET("/favorite", func(c *gin.Context) {
 		u := CurrentUser(c)
 		var fr []FavoriteResult
-		if err := dao.Collection("file_favorite").Pipe([]bson.M{
+		if err := dao.FileFavorite().Pipe([]bson.M{
 			{
 				"$match": bson.M{"userId": u.Id},
 			},
@@ -47,7 +47,7 @@ func HomeController(r *gin.RouterGroup) {
 					},
 				},
 			},
-		}).All(&fr); err != nil {
+		}, &fr); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{"success": true, "favorites": fr})

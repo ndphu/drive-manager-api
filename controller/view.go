@@ -26,7 +26,7 @@ func ViewController(r *gin.RouterGroup) {
 	r.GET("/tree/projects", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projects := make([]ProjectTreeView, 0)
-		if err := dao.Collection("project").Pipe([]bson.M{
+		if err := dao.Project().Pipe([]bson.M{
 			{
 				"$match": bson.M{"owner": user.Id},
 			},
@@ -55,7 +55,7 @@ func ViewController(r *gin.RouterGroup) {
 					"accounts":    1,
 				},
 			},
-		}).All(&projects); err != nil {
+		}, &projects); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{"projects": projects})

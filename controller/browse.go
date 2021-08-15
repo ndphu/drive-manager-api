@@ -44,7 +44,7 @@ func BrowseController(r *gin.RouterGroup) {
 			item.Parent = bson.ObjectIdHex(parentId)
 		}
 
-		if err := dao.Collection("item").Insert(item); err != nil {
+		if err := dao.Item().Insert(item); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -67,7 +67,7 @@ func BrowseController(r *gin.RouterGroup) {
 		item.Type = "folder"
 		item.Id = bson.NewObjectId()
 
-		if err := dao.Collection("item").Insert(item); err != nil {
+		if err := dao.Item().Insert(item); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -88,7 +88,7 @@ func BrowseController(r *gin.RouterGroup) {
 			condition["parent"] = nil
 		}
 		var items []Item
-		if err := dao.Collection("item").Find(condition).All(&items); err != nil {
+		if err := dao.Item().Find(condition, &items); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		} else {
@@ -105,15 +105,15 @@ func BrowseController(r *gin.RouterGroup) {
 		}
 
 		var i Item
-		if err := dao.Collection("item").Find(bson.M{
+		if err := dao.Item().Find(bson.M{
 			"_id":   bson.ObjectIdHex(itemId),
 			"owner": u.Id,
-		}).One(&i); err != nil {
+		}, &i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 		i.Deleted = true
-		if err := dao.Collection("item").UpdateId(bson.ObjectIdHex(itemId), i); err != nil {
+		if err := dao.Item().UpdateId(bson.ObjectIdHex(itemId), i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
