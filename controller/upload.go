@@ -31,7 +31,9 @@ func UploadController(r *gin.RouterGroup) {
 		}
 		var accounts []entity.DriveAccount
 		uploadBuffer := int64(1073741824)
-		if err := dao.Collection("drive_account").
+		session, collection := dao.CollectionWithSession("drive_account")
+		defer session.Close()
+		if err := collection.
 			Find(
 				bson.M{
 					"owner":     user.Id,

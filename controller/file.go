@@ -9,7 +9,9 @@ import (
 func FileController(r *gin.RouterGroup) {
 	r.GET("/countByName/:name", func(c *gin.Context) {
 		user := CurrentUser(c)
-		if count, err := dao.Collection("file_index").Find(bson.M{
+		session, collection := dao.CollectionWithSession("file_index")
+		defer session.Close()
+		if count, err := collection.Find(bson.M{
 			"name":  c.Param("name"),
 			"owner": user.Id,
 		}).Count(); err != nil {

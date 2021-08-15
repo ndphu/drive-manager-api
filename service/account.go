@@ -161,7 +161,9 @@ func (s *AccountService) UpdateKey(id string, key []byte) error {
 
 func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
 	var acc entity.DriveAccount
-	if err := dao.Collection("drive_account").FindId(bson.ObjectIdHex(accountId)).One(&acc); err != nil {
+	session, collection := dao.CollectionWithSession("drive_account")
+	defer session.Close()
+	if err := collection.FindId(bson.ObjectIdHex(accountId)).One(&acc); err != nil {
 		return err
 	}
 	return s.UpdateCachedQuota(&acc)
@@ -181,7 +183,9 @@ func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 	acc.Limit = quota.Limit
 	acc.Available = quota.Limit - quota.Usage
 	acc.QuotaUpdateTimestamp = updatedAt
-	return dao.Collection("drive_account").Update(
+	session, collection := dao.CollectionWithSession("drive_account")
+	defer session.Close()
+	return collection.Update(
 		bson.M{"_id": acc.Id},
 		bson.M{
 			"$set": bson.M{

@@ -63,6 +63,51 @@ func ProjectController(r *gin.RouterGroup) {
 		}
 	})
 
+	r.POST("/projects", func(c *gin.Context) {
+		user := CurrentUser(c)
+		displayName := strings.TrimSpace(c.Request.FormValue("displayName"))
+		if displayName == "" {
+			c.AbortWithStatusJSON(400, gin.H{"error": "Project name could not be empty"})
+			return
+		}
+		numberOfAccounts := 0
+		num := c.Request.FormValue("numberOfAccounts")
+		if num != "" {
+			parsed, err := strconv.Atoi(num)
+			if err != nil {
+				c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
+				return
+			} else {
+				numberOfAccounts = parsed
+			}
+		}
+
+		uploadFile, _, err := c.Request.FormFile("file")
+		if err != nil {
+			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		key, err := ioutil.ReadAll(uploadFile)
+		if err != nil {
+			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		project, err := s.CreateProject(displayName, key, numberOfAccounts, user.Id)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		p, err := queryProjectLookup(user.Id.Hex(), project.Id.Hex())
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"success": true, "project": p})
+		}
+
+	})
+
 	r.DELETE("/project/:id", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
@@ -139,51 +184,6 @@ func ProjectController(r *gin.RouterGroup) {
 				"success": true,
 			})
 		}
-	})
-
-	r.POST("/projects", func(c *gin.Context) {
-		user := CurrentUser(c)
-		displayName := strings.TrimSpace(c.Request.FormValue("displayName"))
-		if displayName == "" {
-			c.AbortWithStatusJSON(400, gin.H{"error": "Project name could not be empty"})
-			return
-		}
-		numberOfAccounts := 0
-		num := c.Request.FormValue("numberOfAccounts")
-		if num != "" {
-			parsed, err := strconv.Atoi(num)
-			if err != nil {
-				c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
-				return
-			} else {
-				numberOfAccounts = parsed
-			}
-		}
-
-		uploadFile, _, err := c.Request.FormFile("file")
-		if err != nil {
-			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		key, err := ioutil.ReadAll(uploadFile)
-		if err != nil {
-			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
-		project, err := s.CreateProject(displayName, key, numberOfAccounts, user.Id)
-		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-
-		p, err := queryProjectLookup(user.Id.Hex(), project.Id.Hex())
-		if err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
-		} else {
-			c.JSON(200, gin.H{"success": true, "project": p})
-		}
-
 	})
 
 	r.POST("/project/:id/sync", func(c *gin.Context) {

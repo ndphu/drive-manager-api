@@ -17,7 +17,7 @@ var (
 	dao *DAO = nil
 )
 
-func init()  {
+func init() {
 	conf := config.Get()
 	var session *mgo.Session
 	var err error
@@ -26,7 +26,7 @@ func init()  {
 		session, err = mgo.Dial(conf.MongoDBUri)
 	} else {
 		tlsConfig := &tls.Config{}
-		dialInfo, err:= mgo.ParseURL(conf.MongoDBUri)
+		dialInfo, err := mgo.ParseURL(conf.MongoDBUri)
 		if err != nil {
 			panic(err)
 		}
@@ -68,6 +68,11 @@ func init()  {
 
 func Collection(name string) *mgo.Collection {
 	return dao.Session.DB(dao.DBName).C(name)
+}
+
+func CollectionWithSession(name string) (*mgo.Session, *mgo.Collection) {
+	s := dao.Session.Copy()
+	return s, s.DB(dao.DBName).C(name)
 }
 
 func GetSession() *mgo.Session {

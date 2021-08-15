@@ -285,4 +285,16 @@ func AccountController(r *gin.RouterGroup) {
 			}
 		}
 	})
+
+	r.POST("/account/:id/syncQuota", func(c *gin.Context) {
+		//user := CurrentUser(c)
+		//userId := user.Id.Hex()
+		// TODO: permission!!!
+		accountId := c.Param("id")
+		if err := accountService.UpdateCachedQuotaByAccountId(accountId); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"success": true})
+		}
+	})
 }
