@@ -169,6 +169,24 @@ func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
 	return s.UpdateCachedQuota(&acc)
 }
 
+func (s *AccountService) UpdateCachedQuotaByAccountIdAndAdditionalSize(accountId string, addedSize int64) error {
+	var acc entity.DriveAccount
+	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+		return err
+	}
+	//return s.UpdateCachedQuota(&acc)
+	updatedAt := time.Now()
+	return dao.DriveAccount().Update(
+		bson.M{"_id": acc.Id},
+		bson.M{
+			"$set": bson.M{
+				"usage":                acc.Usage + addedSize,
+				"available":            acc.Limit - addedSize,
+				"quotaUpdateTimestamp": updatedAt,
+			},
+		})
+}
+
 func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 	driveService, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
@@ -483,29 +501,10 @@ func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favor
 	return &fv, nil
 }
 
-func (s *AccountService) SyncFile(userId string, accountId string, fileId string) (*FileIndex, error) {
-	var existing []FileIndex
-	if err := dao.FileIndex().Find(bson.M{"fileId": fileId}, &existing); err != nil {
-		log.Println("SyncFile", "Fail to query if file already sync", err.Error())
-		return nil, err
-	}
-	if len(existing) > 0 {
-		log.Println("File already synchronized")
-		return &existing[0], nil
-	}
+func (s *AccountService) SyncFile(userId string, accountId string, cloudFile drive.File) (*FileIndex, error) {
 	var acc entity.DriveAccount
 	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
 		log.Println("SyncFile", "failed by error", err.Error())
-		return nil, err
-	}
-	ds, err := helper.GetDriveService([]byte(acc.Key))
-	if err != nil {
-		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
-		return nil, err
-	}
-	cloudFile, err := ds.GetFile(fileId)
-	if err != nil {
-		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get cloud file by error", err.Error())
 		return nil, err
 	}
 	ct, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.CreatedTime)
@@ -530,6 +529,53 @@ func (s *AccountService) SyncFile(userId string, accountId string, fileId string
 	return &f, nil
 }
 
+func (s *AccountService) SyncFileById(userId string, accountId string, fileId string) (*FileIndex, error) {
+	var existing []FileIndex
+	if err := dao.FileIndex().Find(bson.M{"fileId": fileId}, &existing); err != nil {
+		log.Println("SyncFileById", "Fail to query if file already sync", err.Error())
+		return nil, err
+	}
+	if len(existing) > 0 {
+		log.Println("File already synchronized")
+		return &existing[0], nil
+	}
+	var acc entity.DriveAccount
+	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+		log.Println("SyncFileById", "failed by error", err.Error())
+		return nil, err
+	}
+	ds, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		log.Println("SyncFileById", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
+		return nil, err
+	}
+	cloudFile, err := ds.GetFile(fileId)
+	if err != nil {
+		log.Println("SyncFileById", "Account", acc.Id.Hex(), "Fail to get cloud file by error", err.Error())
+		return nil, err
+	}
+	ct, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.CreatedTime)
+	mt, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.ModifiedTime)
+	f := FileIndex{
+		Id:           bson.NewObjectId(),
+		FileId:       cloudFile.Id,
+		Name:         cloudFile.Name,
+		Size:         cloudFile.Size,
+		MimeType:     cloudFile.MimeType,
+		AccountId:    acc.Id,
+		Owner:        acc.Owner,
+		ProjectId:    acc.ProjectId,
+		CreatedTime:  ct,
+		ModifiedTime: mt,
+		SyncTime:     time.Now(),
+	}
+	if err := dao.FileIndex().Insert(f); err != nil {
+		log.Println("SyncFileById", "Fail to insert file index by error", err.Error())
+		return nil, err
+	}
+	return &f, nil
+}
+
 func (s *AccountService) ListFile(accountId string) ([]*helper.File, error) {
 	acc, err := s.FindAccount(accountId)
 	if err != nil {
@@ -537,7 +583,7 @@ func (s *AccountService) ListFile(accountId string) ([]*helper.File, error) {
 	}
 	ds, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
-		log.Println("SyncFile", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
+		log.Println("SyncFileById", "Account", acc.Id.Hex(), "Fail to get drive service from key by error", err.Error())
 		return nil, err
 	}
 

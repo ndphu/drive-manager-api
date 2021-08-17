@@ -112,6 +112,16 @@ func (c *C) RemoveAll(filter bson.M) (*mgo.ChangeInfo, error) {
 	return info, err
 }
 
+func (c *C) UpdateAll(selector bson.M, update bson.M) (*mgo.ChangeInfo, error) {
+	var info *mgo.ChangeInfo
+	err := c.Template(func(col *mgo.Collection) error {
+		_info, err := col.UpdateAll(selector, update)
+		info = _info
+		return err
+	})
+	return info, err
+}
+
 var (
 	ds *DataStore = nil
 )

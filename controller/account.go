@@ -1,10 +1,13 @@
 package controller
 
 import (
+	"encoding/base64"
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/mgo"
 	"github.com/ndphu/drive-manager-api/middleware"
 	"github.com/ndphu/drive-manager-api/service"
+	"google.golang.org/api/drive/v3"
+	"log"
 )
 
 func AccountController(r *gin.RouterGroup) {
@@ -53,8 +56,32 @@ func AccountController(r *gin.RouterGroup) {
 		user := CurrentUser(c)
 		userId := user.Id.Hex()
 		accountId := c.Param("id")
+		var file drive.File
+		if err := c.ShouldBindJSON(&file); err != nil {
+			log.Println("Fail to parse file response...")
+			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if fv, err := accountService.SyncFile(userId, accountId, file); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		} else {
+			if err := accountService.UpdateCachedQuotaByAccountIdAndAdditionalSize(accountId, file.Size); err != nil {
+				c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(200, gin.H{"success": true, "file": fv})
+			}
+		}
+	})
+
+	r.POST("/account/:id/file/:fileId/oldSync", func(c *gin.Context) {
+		user := CurrentUser(c)
+		userId := user.Id.Hex()
+		accountId := c.Param("id")
 		fileId := c.Param("fileId")
-		if fv, err := accountService.SyncFile(userId, accountId, fileId); err != nil {
+
+		if fv, err := accountService.SyncFileById(userId, accountId, fileId); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			if err := accountService.UpdateCachedQuotaByAccountId(accountId); err != nil {
@@ -63,6 +90,16 @@ func AccountController(r *gin.RouterGroup) {
 				c.JSON(200, gin.H{"success": true, "file": fv})
 			}
 		}
+	})
+
+	r.GET("/account/:id/key", func(c *gin.Context) {
+		account, err := accountService.FindAccount(c.Param("id"))
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		key := []byte(account.Key)
+		c.String(200, base64.StdEncoding.EncodeToString(key))
 	})
 
 	r.POST("/account/:id/syncQuota", func(c *gin.Context) {

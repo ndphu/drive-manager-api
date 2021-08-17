@@ -40,12 +40,26 @@ func ViewController(r *gin.RouterGroup) {
 								"$eq": []string{"$projectId", "$$projectId"},
 							},
 						}},
-						{"$project": bson.M{
-							"_id":  1,
-							"name": 1,
-						}},
+						{
+							"$project": bson.M{
+								"_id":  1,
+								"name": 1,
+							},
+						},
+						{
+							"$sort": bson.M{
+								"_id":      1,
+								"disabled": -1,
+							},
+						},
 					},
 					"as": "accounts",
+				},
+			},
+			{
+				"$sort": bson.M{
+					"disabled": 1,
+					"_id":      1,
 				},
 			},
 			{

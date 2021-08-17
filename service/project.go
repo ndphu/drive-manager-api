@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/globalsign/mgo/txn"
 	"github.com/ndphu/drive-manager-api/dao"
@@ -418,6 +419,55 @@ func (s *ProjectService) SyncProjectQuota(projectId string) error {
 			log.Println("Fail to update quota for account", account.Id.Hex())
 		}
 	}
+	return nil
+}
+
+func (s *ProjectService) DisableProject(projectId string) error {
+	return s.setProjectDisabled(projectId, true)
+}
+
+func (s *ProjectService) EnableProject(projectId string) error {
+	return s.setProjectDisabled(projectId, false)
+}
+
+func (s *ProjectService) setProjectDisabled(projectId string, disabled bool) error {
+	if !bson.IsObjectIdHex(projectId) {
+		return errors.New("InvalidProjectId")
+	}
+	pid := bson.ObjectIdHex(projectId)
+	ops := []txn.Op{{
+		C:      "project",
+		Id:     pid,
+		Assert: txn.DocExists,
+		Update: bson.M{"$set": bson.M{
+			"disabled": disabled,
+		}},
+	}}
+	accounts := make([]entity.DriveAccount, 0)
+	err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+		return col.Find(bson.M{"projectId": pid}).Select(bson.M{"_id": 1}).All(&accounts)
+	})
+	if err != nil {
+		log.Println("Fail to query accounts belong to project", projectId, "by error", err.Error())
+		return err
+	}
+	for _, account := range accounts {
+		ops = append(ops, txn.Op{
+			C:      "drive_account",
+			Id:     account.Id,
+			Assert: txn.DocExists,
+			Update: bson.M{"$set": bson.M{
+				"disabled": disabled,
+			}},
+		})
+	}
+	log.Println("Running transaction...")
+	if err := dao.RunTransaction(ops); err != nil {
+		log.Println("Fai to execute transaction by error", err.Error())
+		return err
+	}
+	log.Println("Transaction executed successfully!")
+
 	return nil
 }
 

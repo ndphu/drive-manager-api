@@ -24,6 +24,7 @@ type ProjectLookup struct {
 	ProjectId        string                `json:"projectId" bson:"projectId"`
 	Owner            bson.ObjectId         `json:"owner" bson:"owner"`
 	Accounts         []entity.DriveAccount `json:"accounts" bson:"accounts"`
+	Disabled         bool                  `json:"disabled" bson:"disabled"`
 	NumberOfAccounts int                   `json:"numberOfAccounts" bson:"numberOfAccounts"`
 }
 
@@ -33,10 +34,17 @@ func ProjectController(r *gin.RouterGroup) {
 
 	r.GET("/projects", func(c *gin.Context) {
 		user := CurrentUser(c)
+		//includeDisabled := c.Query("includeDisabled") == "true"
+		match := bson.M{
+			"owner": user.Id,
+		}
+		//if !includeDisabled {
+		//	match["disabled"] = bson.M{"$ne": true}
+		//}
 		projects := make([]ProjectLookup, 0)
 		if err := dao.Project().Pipe([]bson.M{
 			{
-				"$match": bson.M{"owner": user.Id},
+				"$match": match,
 			},
 			{
 				"$lookup": bson.M{
@@ -47,10 +55,17 @@ func ProjectController(r *gin.RouterGroup) {
 				},
 			},
 			{
+				"$sort": bson.M{
+					"disabled": 1,
+					"_id":     1,
+				},
+			},
+			{
 				"$project": bson.M{
 					"id":          1,
 					"displayName": 1,
 					"owner":       1,
+					"disabled":    1,
 					"projectId":   1,
 					"numberOfAccounts": bson.M{
 						"$size": "$accounts",
@@ -188,6 +203,45 @@ func ProjectController(r *gin.RouterGroup) {
 				"success": true,
 			})
 		}
+	})
+
+	r.PUT("/project/:id/field/:field/value/:value", func(c *gin.Context) {
+		projectId := c.Param("id")
+		field := c.Param("field")
+		switch field {
+		case "disabled":
+			{
+				var err error
+				if c.Param("value") == "true" {
+					err = s.DisableProject(projectId)
+				} else {
+					err = s.EnableProject(projectId)
+				}
+				if err != nil {
+					c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
+					return
+				} else {
+					c.JSON(200, gin.H{"success": true})
+				}
+				break
+			}
+		default:
+			log.Println("Unknown field", field)
+			c.AbortWithStatusJSON(400, gin.H{"success": false, "error": "unknown field: " + field})
+		}
+		//if len(set) > 0 {
+		//	if err := dao.Project().UpdateId(bson.ObjectIdHex(c.Param("id")), bson.M{
+		//		"$set": set,
+		//	}); err != nil {
+		//		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		//		return
+		//	} else {
+		//		c.JSON(200, gin.H{"success": true})
+		//	}
+		//} else {
+		//	c.AbortWithStatusJSON(400, gin.H{"success": false, "error": "Unknown field:" + field})
+		//	return
+		//}
 	})
 
 	r.POST("/project/:id/sync", func(c *gin.Context) {
