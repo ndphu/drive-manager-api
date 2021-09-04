@@ -235,3 +235,9 @@ func (d *DriveService) GetAccessToken() (string, error) {
 	}
 	return token.AccessToken, nil
 }
+
+func (d *DriveService) DeleteFile(fileId string) error {
+	return d.Service.Files.
+		Delete(fileId).
+		Do()
+}

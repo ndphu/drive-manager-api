@@ -111,3 +111,18 @@ func (g *GoogleService) CreateServiceAccount(userId string, projectId string) er
 	log.Println("Successfully create service account")
 	return nil
 }
+
+func (g *GoogleService) DeleteFile(accountId string, fileId string) error {
+	var acc entity.DriveAccount
+	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+		log.Println("Fail to DeleteFile by error", err.Error())
+		return err
+	}
+	s, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		log.Println("Fail to get drive service from account key", err.Error())
+		return err
+	}
+
+	return s.DeleteFile(fileId)
+}
