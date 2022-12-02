@@ -146,4 +146,18 @@ func AccountController(r *gin.RouterGroup) {
 			c.JSON(200, gin.H{"success": true})
 		}
 	})
+
+	r.GET("/account/:id/accessToken", func(c *gin.Context) {
+		account, err := accountService.FindAccountById(bson.ObjectIdHex(c.Param("id")), CurrentUser(c).Id)
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": "fail to find account: " + err.Error()})
+			return
+		}
+		token, err := accountService.GetAccessToken(account)
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": "fail to get access token:"  + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"accessToken": token})
+	})
 }
