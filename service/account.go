@@ -400,9 +400,16 @@ func (s *AccountService) FindAdminAccount(projectId string) (*entity.DriveAccoun
 		"projectId": bson.ObjectIdHex(projectId),
 		"type":      "service_account_admin",
 	}, &admin); err != nil {
-		return nil, err
+		var project entity.Project
+		if err := dao.Project().FindId(bson.ObjectIdHex(projectId), &project); err != nil {
+			return nil, err
+		}
+		admin.Key = project.AdminKey
+		return &admin, nil
+	} else {
+		return &admin, nil
 	}
-	return &admin, nil
+
 }
 
 type FileIndex struct {
