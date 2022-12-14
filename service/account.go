@@ -404,12 +404,36 @@ func (s *AccountService) FindAdminAccount(projectId string) (*entity.DriveAccoun
 		if err := dao.Project().FindId(bson.ObjectIdHex(projectId), &project); err != nil {
 			return nil, err
 		}
-		admin.Key = project.AdminKey
-		return &admin, nil
+
+		return migrateAdminAccount(project)
 	} else {
 		return &admin, nil
 	}
+}
 
+func migrateAdminAccount(project entity.Project) (*entity.DriveAccount, error) {
+	log.Println("Migrate admin account for project", project.Id.Hex())
+	kd := KeyDetails{}
+	if err := json.Unmarshal([]byte(project.AdminKey), &kd); err != nil {
+		return nil, err
+	}
+	accountId := bson.NewObjectId()
+	acc := entity.DriveAccount{
+		Id:          accountId,
+		ProjectId:   project.Id,
+		Name:        "admin-account",
+		Key:         project.AdminKey,
+		Desc:        "Admin Account",
+		Type:        "service_account_admin",
+		ClientEmail: kd.ClientEmail,
+		ClientId:    kd.ClientId,
+		Owner:       project.Owner,
+	}
+
+	if err := dao.DriveAccount().Insert(&acc); err != nil {
+		return nil, err
+	}
+	return &acc, nil
 }
 
 type FileIndex struct {
