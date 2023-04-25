@@ -13,7 +13,7 @@ type Favorite struct {
 }
 
 type FavoriteResult struct {
-	Id   bson.ObjectId      `json:"id" bson:"_id"`
+	Id   primitive.ObjectID      `json:"id" bson:"_id"`
 	File *service.FileIndex `json:"file,omitempty" bson:"file,omitempty"`
 }
 

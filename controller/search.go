@@ -22,7 +22,7 @@ func SearchController(r *gin.RouterGroup) error {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			dao.FileIndex().Template(func(col *mgo.Collection) error {
+			dao.FileIndex().Template(func(col *mongo.Collection) error {
 				return col.Find(bson.M{
 					"owner": user.Id,
 					"name":  bson.RegEx{Pattern: query, Options: "i"},
@@ -32,7 +32,7 @@ func SearchController(r *gin.RouterGroup) error {
 
 		go func() {
 			defer wg.Done()
-			dao.DriveAccount().Template(func(col *mgo.Collection) error {
+			dao.DriveAccount().Template(func(col *mongo.Collection) error {
 				return col.Find(bson.M{
 					"name":  bson.RegEx{Pattern: query, Options: "i"},
 					"owner": user.Id,

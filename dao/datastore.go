@@ -1,16 +1,18 @@
 package dao
 
 import (
-	"crypto/tls"
+	"context"
 	"errors"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
-	"net"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"os"
+	"time"
 )
 
 type DataStore struct {
-	Session *mgo.Session
+	Client *mongo.Client
 }
 
 type C struct {
@@ -23,41 +25,52 @@ func Col(name string) *C {
 	}
 }
 
-type CollectionFunc func(col *mgo.Collection) error
+type CollectionFunc func(col *mongo.Collection) error
 
 func collection(name string, cb CollectionFunc) error {
-	session := ds.Session.Copy()
-	defer session.Close()
-	return cb(session.DB("drive-manager").C(name))
+	return cb(ds.Client.Database("driver-manager").Collection(name))
 }
 
-func (c *C) Pipe(pipe []bson.M, result interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Pipe(pipe).All(result)
+func (c *C) Pipe(matchStage, groupStage bson.D, result interface{}) error {
+	return c.Template(func(c *mongo.Collection) error {
+		cursor, err := c.Aggregate(context.TODO(), mongo.Pipeline{groupStage, matchStage})
+		if err != nil {
+			return err
+		}
+		return cursor.All(context.TODO(), result)
 	})
 }
 
 func (c *C) Insert(docs ...interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Insert(docs...)
+	return c.Template(func(c *mongo.Collection) error {
+		_, err := c.InsertMany(context.TODO(), docs)
+		return err
 	})
 }
 
-func (c *C) FindId(id bson.ObjectId, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.FindId(id).One(result)
+func (c *C) FindId(id primitive.ObjectID, result interface{}) error {
+	return c.Template(func(col *mongo.Collection) error {
+		return col.FindOne(context.TODO(), bson.D{{"_id", id}}).Decode(result)
 	})
 }
 
 func (c *C) FindAll(result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(nil).All(result)
+	return c.Template(func(col *mongo.Collection) error {
+		find, err := col.Find(context.TODO(), bson.D{{}})
+		if err != nil {
+			return err
+		}
+		return find.All(context.TODO(), result)
 	})
 }
 
-func (c *C) Find(filter bson.M, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(filter).All(result)
+func (c *C) Find(filter bson.D, result interface{}) error {
+	return c.Template(func(col *mongo.Collection) error {
+		find, err := col.Find(context.TODO(), filter)
+		if err != nil {
+			return err
+		}
+		return find.All(context.TODO(), result)
 	})
 }
 
@@ -65,34 +78,40 @@ func (c *C) Template(cb CollectionFunc) error {
 	return collection(c.Name, cb)
 }
 
-func (c *C) PipeOne(pipe []bson.M, result interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Pipe(pipe).One(result)
+func (c *C) PipeOne(matchStage, groupStage bson.D, result interface{}) error {
+	return c.Template(func(c *mongo.Collection) error {
+		cursor, err := c.Aggregate(context.TODO(), mongo.Pipeline{matchStage, groupStage})
+		if err != nil {
+			return err
+		}
+		return cursor.All(context.TODO(), result)
 	})
 }
 
-func (c *C) FindOne(filter bson.M, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(filter).One(result)
+func (c *C) FindOne(filter bson.D, result interface{}) error {
+	return c.Template(func(col *mongo.Collection) error {
+		return col.FindOne(context.TODO(), filter).Decode(result)
 	})
 }
 
-func (c *C) UpdateId(id bson.ObjectId, e interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.UpdateId(id, e)
+func (c *C) ReplaceOne(id primitive.ObjectID, e interface{}) error {
+	return c.Template(func(col *mongo.Collection) error {
+		_, err := col.ReplaceOne(context.TODO(), bson.D{{"_id", id}}, e)
+		return err
 	})
 }
 
-func (c *C) Update(selector bson.M, update bson.M) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Update(selector, update)
+func (c *C) Update(filter bson.D, update bson.D) error {
+	return c.Template(func(col *mongo.Collection) error {
+		_, err := col.UpdateOne(context.TODO(), filter, update)
+		return err
 	})
 }
 
-func (c *C) Count(filter bson.M) (int, error) {
-	result := 0
-	err := c.Template(func(col *mgo.Collection) error {
-		count, err := col.Find(filter).Count()
+func (c *C) Count(filter bson.D) (int64, error) {
+	var result int64 = 0
+	err := c.Template(func(col *mongo.Collection) error {
+		count, err := col.CountDocuments(context.TODO(), filter)
 		if err != nil {
 			return err
 		}
@@ -102,24 +121,18 @@ func (c *C) Count(filter bson.M) (int, error) {
 	return result, err
 }
 
-func (c *C) RemoveAll(filter bson.M) (*mgo.ChangeInfo, error) {
-	var info *mgo.ChangeInfo
-	err := c.Template(func(col *mgo.Collection) error {
-		_info, err := col.RemoveAll(filter)
-		info = _info
+func (c *C) RemoveAll(filter bson.D) error {
+	return c.Template(func(col *mongo.Collection) error {
+		_, err := col.DeleteMany(context.TODO(), filter)
 		return err
 	})
-	return info, err
 }
 
-func (c *C) UpdateAll(selector bson.M, update bson.M) (*mgo.ChangeInfo, error) {
-	var info *mgo.ChangeInfo
-	err := c.Template(func(col *mgo.Collection) error {
-		_info, err := col.UpdateAll(selector, update)
-		info = _info
+func (c *C) UpdateAll(filter bson.D, update bson.D) error {
+	return c.Template(func(col *mongo.Collection) error {
+		_, err := col.UpdateMany(context.TODO(), filter, update)
 		return err
 	})
-	return info, err
 }
 
 var (
@@ -137,42 +150,32 @@ func isSslEnabled() bool {
 }
 
 func Init() error {
-	var session *mgo.Session
-
 	if getMongoDbUri() == "" {
 		return ErrorEmptyMongoDbUri
 	} else {
-		if isSslEnabled() {
-			tlsConfig := &tls.Config{}
-			dialInfo, err := mgo.ParseURL(getMongoDbUri())
-			if err != nil {
-				return err
-			}
-			dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-				conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-				return conn, err
-			}
-			session, err = mgo.DialWithInfo(dialInfo)
-			if err != nil {
-				return err
-			}
-		} else {
-			//dialInfo, err := mgo.ParseURL(getMongoDbUri())
-			s, err := mgo.Dial(getMongoDbUri())
-			if err != nil {
-				return err
-			}
-			session = s
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_client, err := mongo.Connect(ctx, options.Client().ApplyURI(getMongoDbUri()))
+		if err != nil {
+			panic(err)
 		}
-	}
-	ds = &DataStore{
-		Session: session,
+		ds = &DataStore{
+			Client: _client,
+		}
 	}
 	return nil
 }
 
 func Close() {
-	if ds != nil && ds.Session != nil {
-		ds.Session.Close()
+	//if ds != nil && ds.Session != nil {
+	//	ds.Session.Close()
+	//}
+}
+
+func Disconnect() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := ds.Client.Disconnect(ctx); err != nil {
+		panic(err)
 	}
 }

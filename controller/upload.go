@@ -32,7 +32,7 @@ func UploadController(r *gin.RouterGroup) {
 		}
 		var accounts []entity.DriveAccount
 		uploadBuffer := int64(3221223823) // 3GB
-		if err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+		if err := dao.DriveAccount().Template(func(col *mongo.Collection) error {
 			return col.Pipe([]bson.M{
 				{
 					"$match": bson.M{

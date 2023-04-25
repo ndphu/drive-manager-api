@@ -5,11 +5,12 @@ import (
 	"encoding/base64"
 	"firebase.google.com/go"
 	"firebase.google.com/go/auth"
-	"github.com/globalsign/mgo/bson"
 	"github.com/golang-jwt/jwt"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/nu7hatch/gouuid"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"google.golang.org/api/option"
 	"log"
 	"os"
@@ -22,9 +23,9 @@ type AuthService struct {
 }
 
 type FirebaseAccount struct {
-	Id   bson.ObjectId `json:"id" bson:"_id"`
-	Name string        `json:"name" bson:"name"`
-	Key  string        `json:"key" bson:"key"`
+	Id   primitive.ObjectID `json:"id" bson:"_id"`
+	Name string             `json:"name" bson:"name"`
+	Key  string             `json:"key" bson:"key"`
 }
 
 var authService *AuthService
@@ -40,7 +41,7 @@ func GetAuthService() (*AuthService, error) {
 		adminAccount := FirebaseAccount{}
 		err := dao.FirebaseAdmin().FindOne(nil, &adminAccount)
 		if err != nil {
-			log.Fatal("fail to get Firebase Admin key")
+			log.Fatal("fail to get Firebase Admin key", err.Error())
 		}
 
 		rawKey, err := base64.StdEncoding.DecodeString(adminAccount.Key)
@@ -86,11 +87,15 @@ func (s *AuthService) GetUserFromToken(jwtToken string) (*entity.User, error) {
 			}
 		}
 
-		return &entity.User{
-			Id:    bson.ObjectIdHex(claims["user_id"].(string)),
-			Email: claims["user_email"].(string),
-			Roles: roles,
-		}, nil
+		if hex, err := primitive.ObjectIDFromHex(claims["user_id"].(string)); err != nil {
+			return nil, err
+		} else {
+			return &entity.User{
+				Id:    hex,
+				Email: claims["user_email"].(string),
+				Roles: roles,
+			}, nil
+		}
 	} else {
 		log.Println("fail to parse token")
 		return nil, err
@@ -118,7 +123,7 @@ func (s *AuthService) CreateUserWithEmail(email string, password string, display
 
 	log.Printf("successfully created user: %s\n", u.Email)
 	user := entity.User{
-		Id:          bson.NewObjectId(),
+		Id:          primitive.NewObjectID(),
 		DisplayName: displayName,
 		Email:       u.Email,
 		Roles:       []string{"user"},
@@ -141,8 +146,8 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		return nil, "", err
 	}
 	var user entity.User
-	if err := dao.User().FindOne(bson.M{
-		"email": token.Claims["email"].(string),
+	if err := dao.User().FindOne(bson.D{
+		{"email", token.Claims["email"].(string)},
 	}, &user); err != nil {
 		log.Println("Fai to find user in database by error", err.Error())
 		return nil, "", err
@@ -185,7 +190,7 @@ func (s *AuthService) NewServiceToken(user *entity.User) (*entity.ServiceToken, 
 	}
 
 	st := entity.ServiceToken{
-		Id:        bson.NewObjectId(),
+		Id:        primitive.NewObjectID(),
 		UserId:    user.Id,
 		Token:     token,
 		CreatedAt: now,

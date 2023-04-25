@@ -19,10 +19,10 @@ type ProjectCreateRequest struct {
 }
 
 type ProjectLookup struct {
-	Id               bson.ObjectId         `json:"id" bson:"_id"`
+	Id               primitive.ObjectID         `json:"id" bson:"_id"`
 	DisplayName      string                `json:"displayName" bson:"displayName"`
 	ProjectId        string                `json:"projectId" bson:"projectId"`
-	Owner            bson.ObjectId         `json:"owner" bson:"owner"`
+	Owner            primitive.ObjectID         `json:"owner" bson:"owner"`
 	Accounts         []entity.DriveAccount `json:"accounts" bson:"accounts"`
 	Disabled         bool                  `json:"disabled" bson:"disabled"`
 	NumberOfAccounts int                   `json:"numberOfAccounts" bson:"numberOfAccounts"`
@@ -154,9 +154,9 @@ func ProjectController(r *gin.RouterGroup) {
 	r.GET("/project/:id/accounts", func(c *gin.Context) {
 		user := CurrentUser(c)
 		accounts := make([]entity.DriveAccount, 0)
-		if err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+		if err := dao.DriveAccount().Template(func(col *mongo.Collection) error {
 			return col.Find(bson.M{
-				"projectId": bson.ObjectIdHex(c.Param("id")),
+				"projectId": primitive.ObjectIDFromHex(c.Param("id")),
 				"owner":     user.Id,
 			}).Select(bson.M{
 				"key": 0,
@@ -230,7 +230,7 @@ func ProjectController(r *gin.RouterGroup) {
 			c.AbortWithStatusJSON(400, gin.H{"success": false, "error": "unknown field: " + field})
 		}
 		//if len(set) > 0 {
-		//	if err := dao.Project().UpdateId(bson.ObjectIdHex(c.Param("id")), bson.M{
+		//	if err := dao.Project().UpdateId(primitive.ObjectIDFromHex(c.Param("id")), bson.M{
 		//		"$set": set,
 		//	}); err != nil {
 		//		c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
@@ -248,7 +248,7 @@ func ProjectController(r *gin.RouterGroup) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
 		if count, err := dao.Project().Count(bson.M{
-			"_id":   bson.ObjectIdHex(projectId),
+			"_id":   primitive.ObjectIDFromHex(projectId),
 			"owner": user.Id,
 		}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
@@ -272,8 +272,8 @@ func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {
 		{
 			"$match": bson.M{
 				"$and": []bson.M{
-					{"_id": bson.ObjectIdHex(projectId)},
-					{"owner": bson.ObjectIdHex(userId)},
+					{"_id": primitive.ObjectIDFromHex(projectId)},
+					{"owner": primitive.ObjectIDFromHex(userId)},
 				},
 			},
 		},

@@ -3,6 +3,7 @@ package dao
 import (
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/txn"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func DriveAccount() *C {
@@ -50,7 +51,7 @@ func FirebaseConfig() *C {
 }
 
 func RunTransaction(ops []txn.Op) error {
-	return collection("transaction", func(col *mgo.Collection) error {
+	return collection("transaction", func(col *mongo.Collection) error {
 		return txn.NewRunner(col).Run(ops, "", nil)
 	})
 }

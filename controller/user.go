@@ -22,7 +22,7 @@ type LoginWithFirebase struct {
 }
 
 type UserInfo struct {
-	Id            bson.ObjectId `json:"id" bson:"_id"`
+	Id            primitive.ObjectID `json:"id" bson:"_id"`
 	Email         string        `json:"email" bson:"email"`
 	Roles         []string      `json:"roles" bson:"roles"`
 	DisplayName   string        `json:"displayName" bson:"displayName"`

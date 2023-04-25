@@ -8,15 +8,15 @@ import (
 )
 
 type ProjectTreeView struct {
-	Id          bson.ObjectId     `json:"id" bson:"_id"`
+	Id          primitive.ObjectID     `json:"id" bson:"_id"`
 	DisplayName string            `json:"displayName" bson:"displayName"`
 	ProjectId   string            `json:"projectId" bson:"projectId"`
-	Owner       bson.ObjectId     `json:"owner" bson:"owner"`
+	Owner       primitive.ObjectID     `json:"owner" bson:"owner"`
 	Accounts    []AccountTreeView `json:"accounts" bson:"accounts"`
 }
 
 type AccountTreeView struct {
-	Id        bson.ObjectId `json:"id,omitempty" bson:"_id"`
+	Id        primitive.ObjectID `json:"id,omitempty" bson:"_id"`
 	AccountId int64         `json:"accountId,omitempty" bson:"accountId"`
 	Name      string        `json:"name,omitempty" bson:"name"`
 }

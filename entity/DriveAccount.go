@@ -6,7 +6,7 @@ import (
 )
 
 type DriveAccount struct {
-	Id                   bson.ObjectId `json:"id" bson:"_id"`
+	Id                   primitive.ObjectID `json:"id" bson:"_id"`
 	Name                 string        `json:"name" bson:"name"`
 	Desc                 string        `json:"desc" bson:"desc"`
 	Type                 string        `json:"type" bson:"type"`
@@ -16,7 +16,7 @@ type DriveAccount struct {
 	Usage                int64         `json:"usage" bson:"usage"`
 	Available            int64         `json:"available" bson:"available"`
 	Limit                int64         `json:"limit" bson:"limit"`
-	Owner                bson.ObjectId `json:"owner" bson:"owner"`
-	ProjectId            bson.ObjectId `json:"projectId" bson:"projectId"`
+	Owner                primitive.ObjectID `json:"owner" bson:"owner"`
+	ProjectId            primitive.ObjectID `json:"projectId" bson:"projectId"`
 	QuotaUpdateTimestamp time.Time     `json:"quotaUpdateTimestamp" bson:"quotaUpdateTimestamp"`
 }

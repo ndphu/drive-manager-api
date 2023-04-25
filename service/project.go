@@ -11,6 +11,8 @@ import (
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/helper"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -35,7 +37,7 @@ func GetProjectService() *ProjectService {
 	return projectService
 }
 
-func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfAccounts int, owner bson.ObjectId) (*entity.Project, error) {
+func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfAccounts int, owner primitive.ObjectID) (*entity.Project, error) {
 	kd := KeyDetails{}
 	if err := json.Unmarshal(key, &kd); err != nil {
 		log.Println("Fail to parse project admin key by error", err.Error())
@@ -71,13 +73,13 @@ func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfA
 	return project, nil
 }
 
-func (s *ProjectService) insertProject(displayName string, key []byte, owner bson.ObjectId) (*entity.Project, *entity.DriveAccount, error) {
+func (s *ProjectService) insertProject(displayName string, key []byte, owner primitive.ObjectID) (*entity.Project, *entity.DriveAccount, error) {
 	kd := KeyDetails{}
 	if err := json.Unmarshal(key, &kd); err != nil {
 		return nil, nil, err
 	}
-	pid := bson.NewObjectId()
-	accountId := bson.NewObjectId()
+	pid := primitive.NewObjectID()
+	accountId := primitive.NewObjectID()
 	prj := entity.Project{
 		Id:          pid,
 		DisplayName: displayName,
@@ -200,15 +202,15 @@ func (s *ProjectService) ProvisionProject(project *entity.Project, adminAccount 
 
 func (s *ProjectService) SyncProject(projectId string, userId string) error {
 	var p entity.Project
-	if err := dao.Project().FindOne(bson.M{"_id": bson.ObjectIdHex(projectId), "owner": bson.ObjectIdHex(userId)}, &p);
+	if err := dao.Project().FindOne(bson.M{"_id": primitive.ObjectIDFromHex(projectId), "owner": primitive.ObjectIDFromHex(userId)}, &p);
 		err != nil {
 		log.Println("Fail to find project to perform sync by error", err.Error())
 		return err
 	}
 	var accList []entity.DriveAccount
 	if err := dao.DriveAccount().Find(bson.M{
-		"projectId": bson.ObjectIdHex(projectId),
-		"owner":     bson.ObjectIdHex(userId),
+		"projectId": primitive.ObjectIDFromHex(projectId),
+		"owner":     primitive.ObjectIDFromHex(userId),
 	}, &accList); err != nil {
 		log.Println("Fail to get account list by error", err.Error())
 		return err
@@ -225,7 +227,7 @@ func (s *ProjectService) SyncProject(projectId string, userId string) error {
 
 func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, error) {
 	var p entity.Project
-	if err := dao.Project().FindOne(bson.M{"_id": bson.ObjectIdHex(projectId)}, &p);
+	if err := dao.Project().FindOne(bson.M{"_id": primitive.ObjectIDFromHex(projectId)}, &p);
 		err != nil {
 		log.Println("No project found for id", projectId)
 		return nil, err
@@ -234,7 +236,7 @@ func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, 
 	var key []byte
 	var admin entity.DriveAccount
 	if err := dao.DriveAccount().FindOne(bson.M{
-		"projectId": bson.ObjectIdHex(projectId),
+		"projectId": primitive.ObjectIDFromHex(projectId),
 		"type":      "service_account_admin",
 	}, &admin); err != nil {
 		log.Println("No admin account for project", projectId)
@@ -253,7 +255,7 @@ func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, 
 
 func (s *ProjectService) DeleteProject(projectId string) error {
 	log.Println("Deleting project", projectId)
-	pid := bson.ObjectIdHex(projectId)
+	pid := primitive.ObjectIDFromHex(projectId)
 	if ci, err := dao.FileIndex().RemoveAll(bson.M{
 		"projectId": pid,
 	}); err != nil {
@@ -388,7 +390,7 @@ func (s *ProjectService) InsertDriveAccount(proj *entity.Project, sa *iam.Servic
 
 func (s *ProjectService) GetProject(id string) (*entity.Project, error) {
 	var p entity.Project
-	if err := dao.Project().FindId(bson.ObjectIdHex(id), &p); err != nil {
+	if err := dao.Project().FindId(primitive.ObjectIDFromHex(id), &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -409,7 +411,7 @@ func (s *ProjectService) GetIamService(project *entity.Project) (*helper.IamServ
 func (s *ProjectService) SyncProjectQuota(projectId string) error {
 	var accounts []entity.DriveAccount
 	if err := dao.DriveAccount().Find(bson.M{
-		"projectId": bson.ObjectIdHex(projectId),
+		"projectId": primitive.ObjectIDFromHex(projectId),
 	}, &accounts); err != nil {
 		return err
 	}
@@ -431,10 +433,10 @@ func (s *ProjectService) EnableProject(projectId string) error {
 }
 
 func (s *ProjectService) setProjectDisabled(projectId string, disabled bool) error {
-	if !bson.IsObjectIdHex(projectId) {
+	if !bson.IsObjectIDFromHex(projectId) {
 		return errors.New("InvalidProjectId")
 	}
-	pid := bson.ObjectIdHex(projectId)
+	pid := primitive.ObjectIDFromHex(projectId)
 	ops := []txn.Op{{
 		C:      "project",
 		Id:     pid,
@@ -444,7 +446,7 @@ func (s *ProjectService) setProjectDisabled(projectId string, disabled bool) err
 		}},
 	}}
 	accounts := make([]entity.DriveAccount, 0)
-	err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
+	err := dao.DriveAccount().Template(func(col *mongo.Collection) error {
 		return col.Find(bson.M{"projectId": pid}).Select(bson.M{"_id": 1}).All(&accounts)
 	})
 	if err != nil {

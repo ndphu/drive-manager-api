@@ -1,12 +1,13 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/helper"
-	"encoding/json"
-	"fmt"
-	"github.com/globalsign/mgo/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
@@ -23,7 +24,8 @@ type GoogleService struct {
 
 func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.DownloadDetails, error) {
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	hex, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindId(hex, &acc); err != nil {
 		log.Println("Fail to file drive account by error", err.Error())
 		return nil, err
 	}
@@ -60,10 +62,10 @@ func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.Downl
 }
 
 func (g *GoogleService) CreateServiceAccount(userId string, projectId string) error {
-	owner := bson.ObjectIdHex(userId)
-	//pid := bson.ObjectIdHex(projectId)
+	owner, _ := primitive.ObjectIDFromHex(userId)
+	//pid := primitive.ObjectIDFromHex(projectId)
 	adminAccount := entity.ServiceAccountAdmin{}
-	err := dao.ServiceAccountAdmin().FindOne(bson.M{"userId": owner},&adminAccount)
+	err := dao.ServiceAccountAdmin().FindOne(bson.D{{"userId", owner}}, &adminAccount)
 	if err != nil {
 		return err
 	}
@@ -114,7 +116,8 @@ func (g *GoogleService) CreateServiceAccount(userId string, projectId string) er
 
 func (g *GoogleService) DeleteFile(accountId string, fileId string) error {
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	hex, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindId(hex, &acc); err != nil {
 		log.Println("Fail to DeleteFile by error", err.Error())
 		return err
 	}

@@ -5,15 +5,16 @@ import (
 	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/service"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Item struct {
-	Id      bson.ObjectId      `json:"id" bson:"_id"`
+	Id      primitive.ObjectID      `json:"id" bson:"_id"`
 	Name    string             `json:"name"`
 	Type    string             `json:"type"`
-	Owner   bson.ObjectId      `json:"owner"`
+	Owner   primitive.ObjectID      `json:"owner"`
 	File    *service.FileIndex `json:"file,omitempty" bson:"file,omitempty"`
-	Parent  bson.ObjectId      `json:"parent,omitempty" bson:"parent,omitempty"`
+	Parent  primitive.ObjectID      `json:"parent,omitempty" bson:"parent,omitempty"`
 	Deleted bool               `json:"deleted" bson:"deleted"`
 }
 
@@ -41,7 +42,7 @@ func BrowseController(r *gin.RouterGroup) {
 			File:  &file,
 		}
 		if !(parentId == "root" || parentId == "") {
-			item.Parent = bson.ObjectIdHex(parentId)
+			item.Parent = primitive.ObjectIDFromHex(parentId)
 		}
 
 		if err := dao.Item().Insert(item); err != nil {
@@ -59,8 +60,8 @@ func BrowseController(r *gin.RouterGroup) {
 		}
 
 		parentId := c.Param("itemId")
-		if bson.IsObjectIdHex(parentId) {
-			item.Parent = bson.ObjectIdHex(parentId)
+		if bson.IsObjectIDFromHex(parentId) {
+			item.Parent = primitive.ObjectIDFromHex(parentId)
 		}
 
 		item.Owner = CurrentUser(c).Id
@@ -82,8 +83,8 @@ func BrowseController(r *gin.RouterGroup) {
 			"owner":   u.Id,
 			"deleted": bson.M{"$ne": true},
 		}
-		if bson.IsObjectIdHex(parentId) {
-			condition["parent"] = bson.ObjectIdHex(parentId)
+		if bson.IsObjectIDFromHex(parentId) {
+			condition["parent"] = primitive.ObjectIDFromHex(parentId)
 		} else {
 			condition["parent"] = nil
 		}
@@ -100,21 +101,21 @@ func BrowseController(r *gin.RouterGroup) {
 	r.DELETE("/item/:itemId", func(c *gin.Context) {
 		u := CurrentUser(c)
 		itemId := c.Param("itemId")
-		if !bson.IsObjectIdHex(itemId) {
+		if !bson.IsObjectIDFromHex(itemId) {
 			c.AbortWithStatusJSON(400, gin.H{"success": false})
 			return
 		}
 
 		var i Item
 		if err := dao.Item().Find(bson.M{
-			"_id":   bson.ObjectIdHex(itemId),
+			"_id":   primitive.ObjectIDFromHex(itemId),
 			"owner": u.Id,
 		}, &i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 		i.Deleted = true
-		if err := dao.Item().UpdateId(bson.ObjectIdHex(itemId), i); err != nil {
+		if err := dao.Item().UpdateId(primitive.ObjectIDFromHex(itemId), i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
