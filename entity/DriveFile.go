@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/globalsign/mgo/bson"
+import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type DriveFile struct {
 	Id           primitive.ObjectID `json:"id" bson:"_id"`

@@ -39,14 +39,14 @@ func GetAuthService() (*AuthService, error) {
 
 	if authService == nil {
 		adminAccount := FirebaseAccount{}
-		err := dao.FirebaseAdmin().FindOne(nil, &adminAccount)
-		if err != nil {
-			log.Fatal("fail to get Firebase Admin key", err.Error())
+
+		if err := dao.RawCollection("firebase_admin").FindOne(context.Background(), bson.D{}).Decode(&adminAccount); err != nil {
+			log.Fatalln("fail to get Firebase Admin key", err.Error())
 		}
 
 		rawKey, err := base64.StdEncoding.DecodeString(adminAccount.Key)
 		if err != nil {
-			log.Fatal("fail to parse admin key")
+			log.Fatalln("fail to parse admin key")
 		}
 
 		opt := option.WithCredentialsJSON(rawKey)

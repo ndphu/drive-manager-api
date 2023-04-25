@@ -25,6 +25,10 @@ func Col(name string) *C {
 	}
 }
 
+func RawCollection(name string) *mongo.Collection {
+	return ds.Client.Database("drive-manager").Collection(name)
+}
+
 type CollectionFunc func(col *mongo.Collection) error
 
 func collection(name string, cb CollectionFunc) error {
@@ -50,7 +54,7 @@ func (c *C) Insert(docs ...interface{}) error {
 
 func (c *C) FindId(id primitive.ObjectID, result interface{}) error {
 	return c.Template(func(col *mongo.Collection) error {
-		return col.FindOne(context.TODO(), bson.D{{"_id", id}}).Decode(result)
+		return col.FindOne(context.Background(), bson.D{{"_id", id}}).Decode(result)
 	})
 }
 
@@ -90,7 +94,7 @@ func (c *C) PipeOne(matchStage, groupStage bson.D, result interface{}) error {
 
 func (c *C) FindOne(filter bson.D, result interface{}) error {
 	return c.Template(func(col *mongo.Collection) error {
-		return col.FindOne(context.TODO(), filter).Decode(result)
+		return col.FindOne(context.Background(), filter).Decode(result)
 	})
 }
 

@@ -1,7 +1,7 @@
 package entity
 
 import (
-	"github.com/globalsign/mgo/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 )
 

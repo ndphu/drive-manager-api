@@ -10,7 +10,7 @@ require (
 	github.com/go-redis/redis/v8 v8.3.3
 	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
-	go.mongodb.org/mongo-driver v1.11.4 // indirect
+	go.mongodb.org/mongo-driver v1.11.4
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	google.golang.org/api v0.35.0
 )

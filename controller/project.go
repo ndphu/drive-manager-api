@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/service"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"io/ioutil"
 	"log"
 	"strconv"
@@ -19,10 +21,10 @@ type ProjectCreateRequest struct {
 }
 
 type ProjectLookup struct {
-	Id               primitive.ObjectID         `json:"id" bson:"_id"`
+	Id               primitive.ObjectID    `json:"id" bson:"_id"`
 	DisplayName      string                `json:"displayName" bson:"displayName"`
 	ProjectId        string                `json:"projectId" bson:"projectId"`
-	Owner            primitive.ObjectID         `json:"owner" bson:"owner"`
+	Owner            primitive.ObjectID    `json:"owner" bson:"owner"`
 	Accounts         []entity.DriveAccount `json:"accounts" bson:"accounts"`
 	Disabled         bool                  `json:"disabled" bson:"disabled"`
 	NumberOfAccounts int                   `json:"numberOfAccounts" bson:"numberOfAccounts"`
@@ -35,48 +37,79 @@ func ProjectController(r *gin.RouterGroup) {
 	r.GET("/projects", func(c *gin.Context) {
 		user := CurrentUser(c)
 		//includeDisabled := c.Query("includeDisabled") == "true"
-		match := bson.M{
-			"owner": user.Id,
-		}
+		//match := bson.M{
+		//	"owner": user.Id,
+		//}
 		//if !includeDisabled {
 		//	match["disabled"] = bson.M{"$ne": true}
 		//}
 		projects := make([]ProjectLookup, 0)
-		if err := dao.Project().Pipe([]bson.M{
-			{
-				"$match": match,
-			},
-			{
-				"$lookup": bson.M{
-					"from":         "drive_account",
-					"localField":   "_id",
-					"foreignField": "projectId",
-					"as":           "accounts",
-				},
-			},
-			{
-				"$sort": bson.M{
-					"disabled": 1,
-					"_id":     1,
-				},
-			},
-			{
-				"$project": bson.M{
-					"id":          1,
-					"displayName": 1,
-					"owner":       1,
-					"disabled":    1,
-					"projectId":   1,
-					"numberOfAccounts": bson.M{
-						"$size": "$accounts",
-					},
-				},
-			},
-		}, &projects); err != nil {
+
+		matchStage := bson.D{{"$match", bson.D{{"owner", user.Id}}}}
+		lookupStage := bson.D{{"$lookup", bson.D{
+			{"from", "drive_account"},
+			{"localField", "_id"},
+			{"foreignField", "projectId"},
+			{"as", "accounts"},
+		}}}
+		sortStage := bson.D{{"$sort", bson.D{{"disabled", 1}, {"_id", 1}}}}
+		projectStage := bson.D{{"$project", bson.D{
+			{"id", 1},
+			{"displayName", 1},
+			{"owner", 1},
+			{"disabled", 1},
+			{"projectId", 1},
+			{"numberOfAccounts", bson.D{
+				{"$size", "$accounts"},
+			}},
+		}}}
+
+		aggregate, err := dao.RawCollection("project").Aggregate(context.Background(), mongo.Pipeline{matchStage, lookupStage, sortStage, projectStage})
+		if err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		if err := aggregate.All(context.Background(), &projects); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{"projects": projects})
 		}
+
+		//if err := dao.Project().Pipe([]bson.M{
+		//	{
+		//		"$match": match,
+		//	},
+		//	{
+		//		"$lookup": bson.M{
+		//			"from":         "drive_account",
+		//			"localField":   "_id",
+		//			"foreignField": "projectId",
+		//			"as":           "accounts",
+		//		},
+		//	},
+		//	{
+		//		"$sort": bson.M{
+		//			"disabled": 1,
+		//			"_id":      1,
+		//		},
+		//	},
+		//	{
+		//		"$project": bson.M{
+		//			"id":          1,
+		//			"displayName": 1,
+		//			"owner":       1,
+		//			"disabled":    1,
+		//			"projectId":   1,
+		//			"numberOfAccounts": bson.M{
+		//				"$size": "$accounts",
+		//			},
+		//		},
+		//	},
+		//}, &projects); err != nil {
+		//	c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+		//} else {
+		//	c.JSON(200, gin.H{"projects": projects})
+		//}
 	})
 
 	r.POST("/projects", func(c *gin.Context) {
@@ -155,12 +188,21 @@ func ProjectController(r *gin.RouterGroup) {
 		user := CurrentUser(c)
 		accounts := make([]entity.DriveAccount, 0)
 		if err := dao.DriveAccount().Template(func(col *mongo.Collection) error {
-			return col.Find(bson.M{
-				"projectId": primitive.ObjectIDFromHex(c.Param("id")),
+			//return col.Find(context.Background(), bson.M{
+			//	"projectId": primitive.ObjectIDFromHex(c.Param("id")),
+			//	"owner":     user.Id,
+			//}).Select(bson.M{
+			//	"key": 0,
+			//}).All(&accounts)
+			projectIdHex, _ := primitive.ObjectIDFromHex(c.Param("id"))
+			if cur, err := col.Find(context.Background(), bson.M{
+				"projectId": projectIdHex,
 				"owner":     user.Id,
-			}).Select(bson.M{
-				"key": 0,
-			}).All(&accounts)
+			}); err != nil {
+				return err
+			} else {
+				return cur.All(context.Background(), accounts)
+			}
 		}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
@@ -247,10 +289,10 @@ func ProjectController(r *gin.RouterGroup) {
 	r.POST("/project/:id/sync", func(c *gin.Context) {
 		user := CurrentUser(c)
 		projectId := c.Param("id")
-		if count, err := dao.Project().Count(bson.M{
-			"_id":   primitive.ObjectIDFromHex(projectId),
-			"owner": user.Id,
-		}); err != nil {
+		projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
+		if count, err := dao.RawCollection("project").CountDocuments(context.Background(), bson.D{
+			{"_id", projectIdHex},
+			{"owner", user.Id}}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 		} else {
 			if count == 0 {
@@ -268,34 +310,67 @@ func ProjectController(r *gin.RouterGroup) {
 
 func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {
 	var project ProjectLookup
-	if err := dao.Project().PipeOne([]bson.M{
-		{
-			"$match": bson.M{
-				"$and": []bson.M{
-					{"_id": primitive.ObjectIDFromHex(projectId)},
-					{"owner": primitive.ObjectIDFromHex(userId)},
-				},
-			},
+	projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
+	userIdHex, _ := primitive.ObjectIDFromHex(userId)
+	matchStage := bson.D{{"$match", bson.D{
+		{"$and", bson.D{
+			{"_id", projectIdHex},
+			{"owner", userIdHex},
 		},
-		{
-			"$lookup": bson.M{
-				"from": "drive_account",
-				"let":  bson.M{"projectId": "$_id"},
-				"pipeline": []bson.M{
-					{"$match": bson.M{
-						"$expr": bson.M{
-							"$eq": []string{"$projectId", "$$projectId"},
-						},
-					}},
-					{"$project": bson.M{
-						"key": 0,
-					}},
-				},
-				"as": "accounts",
-			},
 		},
-	}, &project); err != nil {
+	}}}
+	lookupStage := bson.D{
+		{"$lookup", bson.D{
+			{"from", "drive_account"},
+			{"let", bson.D{{"projectId", "$_id"}}},
+			{"pipeline", bson.D{
+				{"$match", bson.D{
+					{"$expr", bson.D{
+						{"$eq", []string{"$projectId", "$$projectId"}},
+					}},
+				}},
+				{"$project", bson.D{{"key", 0}}},
+			}},
+			{"as", "accounts"},
+		}},
+	}
+	cursor, err := dao.RawCollection("project").Aggregate(context.Background(), mongo.Pipeline{matchStage, lookupStage})
+	if err != nil {
 		return nil, err
 	}
-	return &project, nil
+	if err := cursor.All(context.Background(), &project); err != nil {
+		return nil, err
+	} else {
+		return &project, err
+	}
+	//if err := dao.Project().PipeOne([]bson.M{
+	//	{
+	//		"$match": bson.M{
+	//			"$and": []bson.M{
+	//				{"_id": primitive.ObjectIDFromHex(projectId)},
+	//				{"owner": primitive.ObjectIDFromHex(userId)},
+	//			},
+	//		},
+	//	},
+	//	{
+	//		"$lookup": bson.M{
+	//			"from": "drive_account",
+	//			"let":  bson.M{"projectId": "$_id"},
+	//			"pipeline": []bson.M{
+	//				{"$match": bson.M{
+	//					"$expr": bson.M{
+	//						"$eq": []string{"$projectId", "$$projectId"},
+	//					},
+	//				}},
+	//				{"$project": bson.M{
+	//					"key": 0,
+	//				}},
+	//			},
+	//			"as": "accounts",
+	//		},
+	//	},
+	//}, &project); err != nil {
+	//	return nil, err
+	//}
+	//return &project, nil
 }

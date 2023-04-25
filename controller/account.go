@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/drive-manager-api/dao"
@@ -25,7 +26,7 @@ func AccountController(r *gin.RouterGroup) {
 		acc, err := accountService.FindAccountLookup(accountId, userId)
 		if err != nil {
 			status := 500
-			if err == mgo.ErrNotFound {
+			if err == mongo.ErrNoDocuments {
 				status = 404
 			}
 			c.AbortWithStatusJSON(status, gin.H{"error": err.Error()})
@@ -65,7 +66,7 @@ func AccountController(r *gin.RouterGroup) {
 			return
 		}
 		if err := dao.Col("file_index").Template(func(col *mongo.Collection) error {
-			_, err := col.RemoveAll(bson.M{"fileId": c.Param("fileId")})
+			_, err := col.DeleteMany(context.Background(), bson.D{{"fileId", c.Param("fileId")}})
 			return err
 		}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
@@ -149,14 +150,15 @@ func AccountController(r *gin.RouterGroup) {
 	})
 
 	r.GET("/account/:id/accessToken", func(c *gin.Context) {
-		account, err := accountService.FindAccountById(primitive.ObjectIDFromHex(c.Param("id")), CurrentUser(c).Id)
+		hex, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		account, err := accountService.FindAccountById(hex, CurrentUser(c).Id)
 		if err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": "fail to find account: " + err.Error()})
 			return
 		}
 		token, err := accountService.GetAccessToken(account)
 		if err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "fail to get access token:"  + err.Error()})
+			c.AbortWithStatusJSON(500, gin.H{"error": "fail to get access token:" + err.Error()})
 			return
 		}
 		c.JSON(200, gin.H{"accessToken": token})

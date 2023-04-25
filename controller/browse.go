@@ -2,9 +2,9 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/service"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -35,14 +35,15 @@ func BrowseController(r *gin.RouterGroup) {
 		}
 
 		item := Item{
-			Id:    bson.NewObjectId(),
+			Id:    primitive.NewObjectID(),
 			Type:  "file",
 			Name:  file.Name,
 			Owner: file.Owner,
 			File:  &file,
 		}
 		if !(parentId == "root" || parentId == "") {
-			item.Parent = primitive.ObjectIDFromHex(parentId)
+			hex, _ := primitive.ObjectIDFromHex(parentId)
+			item.Parent = hex
 		}
 
 		if err := dao.Item().Insert(item); err != nil {
@@ -60,13 +61,14 @@ func BrowseController(r *gin.RouterGroup) {
 		}
 
 		parentId := c.Param("itemId")
-		if bson.IsObjectIDFromHex(parentId) {
-			item.Parent = primitive.ObjectIDFromHex(parentId)
+		if primitive.IsValidObjectID(parentId) {
+			hex, _ := primitive.ObjectIDFromHex(parentId)
+			item.Parent = hex
 		}
 
 		item.Owner = CurrentUser(c).Id
 		item.Type = "folder"
-		item.Id = bson.NewObjectId()
+		item.Id = primitive.NewObjectID()
 
 		if err := dao.Item().Insert(item); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
@@ -79,14 +81,15 @@ func BrowseController(r *gin.RouterGroup) {
 		u := CurrentUser(c)
 		parentId := c.Param("itemId")
 
-		var condition = bson.M{
-			"owner":   u.Id,
-			"deleted": bson.M{"$ne": true},
+		var condition = bson.D{
+			{"owner", u.Id},
+			{"deleted", bson.D{{"$ne", true}}},
 		}
-		if bson.IsObjectIDFromHex(parentId) {
-			condition["parent"] = primitive.ObjectIDFromHex(parentId)
+		if primitive.IsValidObjectID(parentId) {
+			hex, _ := primitive.ObjectIDFromHex(parentId)
+			condition.Map()["parent"] = hex
 		} else {
-			condition["parent"] = nil
+			condition.Map()["parent"] = nil
 		}
 		var items []Item
 		//items := make([]Item, 0)
@@ -101,24 +104,27 @@ func BrowseController(r *gin.RouterGroup) {
 	r.DELETE("/item/:itemId", func(c *gin.Context) {
 		u := CurrentUser(c)
 		itemId := c.Param("itemId")
-		if !bson.IsObjectIDFromHex(itemId) {
+		if !primitive.IsValidObjectID(itemId) {
 			c.AbortWithStatusJSON(400, gin.H{"success": false})
 			return
 		}
 
 		var i Item
-		if err := dao.Item().Find(bson.M{
-			"_id":   primitive.ObjectIDFromHex(itemId),
-			"owner": u.Id,
+		itemIdHex, _ := primitive.ObjectIDFromHex(itemId)
+		if err := dao.Item().Find(bson.D{
+			{"_id", itemIdHex},
+			{"owner", u.Id},
 		}, &i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 		i.Deleted = true
-		if err := dao.Item().UpdateId(primitive.ObjectIDFromHex(itemId), i); err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
-			return
-		}
+		// TODO
+		//hexId, _ := primitive.ObjectIDFromHex(itemId)
+		//if err := dao.Item().Update(hexId, i); err != nil {
+		//	c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
+		//	return
+		//}
 		c.JSON(200, gin.H{"success": true})
 	})
 }
