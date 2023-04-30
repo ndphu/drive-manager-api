@@ -66,7 +66,7 @@ func (g *GoogleService) CreateServiceAccount(userId string, projectId string) er
 	owner, _ := primitive.ObjectIDFromHex(userId)
 	//pid := primitive.ObjectIDFromHex(projectId)
 	adminAccount := entity.ServiceAccountAdmin{}
-	err := dao.ServiceAccountAdmin().FindOne(bson.D{{"userId", owner}}, &adminAccount)
+	err := dao.ServiceAccountAdmin().FindOne(context.Background(), bson.D{{"userId", owner}}).Decode(&adminAccount)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (g *GoogleService) CreateServiceAccount(userId string, projectId string) er
 func (g *GoogleService) DeleteFile(accountId string, fileId string) error {
 	var acc entity.DriveAccount
 	hex, _ := primitive.ObjectIDFromHex(accountId)
-	if err := dao.DriveAccount().FindId(hex, &acc); err != nil {
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hex}}).Decode(&acc); err != nil {
 		log.Println("Fail to DeleteFile by error", err.Error())
 		return err
 	}

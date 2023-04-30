@@ -37,17 +37,17 @@ func collection(name string, cb CollectionFunc) error {
 
 func (c *C) Pipe(matchStage, groupStage bson.D, result interface{}) error {
 	return c.Template(func(c *mongo.Collection) error {
-		cursor, err := c.Aggregate(context.TODO(), mongo.Pipeline{groupStage, matchStage})
+		cursor, err := c.Aggregate(context.Background(), mongo.Pipeline{groupStage, matchStage})
 		if err != nil {
 			return err
 		}
-		return cursor.All(context.TODO(), result)
+		return cursor.All(context.Background(), result)
 	})
 }
 
 func (c *C) Insert(docs ...interface{}) error {
 	return c.Template(func(c *mongo.Collection) error {
-		_, err := c.InsertMany(context.TODO(), docs)
+		_, err := c.InsertMany(context.Background(), docs)
 		return err
 	})
 }
@@ -60,21 +60,21 @@ func (c *C) FindId(id primitive.ObjectID, result interface{}) error {
 
 func (c *C) FindAll(result interface{}) error {
 	return c.Template(func(col *mongo.Collection) error {
-		find, err := col.Find(context.TODO(), bson.D{{}})
+		find, err := col.Find(context.Background(), bson.D{{}})
 		if err != nil {
 			return err
 		}
-		return find.All(context.TODO(), result)
+		return find.All(context.Background(), result)
 	})
 }
 
 func (c *C) Find(filter bson.D, result interface{}) error {
 	return c.Template(func(col *mongo.Collection) error {
-		find, err := col.Find(context.TODO(), filter)
+		find, err := col.Find(context.Background(), filter)
 		if err != nil {
 			return err
 		}
-		return find.All(context.TODO(), result)
+		return find.All(context.Background(), result)
 	})
 }
 
@@ -84,38 +84,18 @@ func (c *C) Template(cb CollectionFunc) error {
 
 func (c *C) PipeOne(matchStage, groupStage bson.D, result interface{}) error {
 	return c.Template(func(c *mongo.Collection) error {
-		cursor, err := c.Aggregate(context.TODO(), mongo.Pipeline{matchStage, groupStage})
+		cursor, err := c.Aggregate(context.Background(), mongo.Pipeline{matchStage, groupStage})
 		if err != nil {
 			return err
 		}
-		return cursor.All(context.TODO(), result)
-	})
-}
-
-func (c *C) FindOne(filter bson.D, result interface{}) error {
-	return c.Template(func(col *mongo.Collection) error {
-		return col.FindOne(context.Background(), filter).Decode(result)
-	})
-}
-
-func (c *C) ReplaceOne(id primitive.ObjectID, e interface{}) error {
-	return c.Template(func(col *mongo.Collection) error {
-		_, err := col.ReplaceOne(context.TODO(), bson.D{{"_id", id}}, e)
-		return err
-	})
-}
-
-func (c *C) Update(filter bson.D, update bson.D) error {
-	return c.Template(func(col *mongo.Collection) error {
-		_, err := col.UpdateOne(context.TODO(), filter, update)
-		return err
+		return cursor.All(context.Background(), result)
 	})
 }
 
 func (c *C) Count(filter bson.D) (int64, error) {
 	var result int64 = 0
 	err := c.Template(func(col *mongo.Collection) error {
-		count, err := col.CountDocuments(context.TODO(), filter)
+		count, err := col.CountDocuments(context.Background(), filter)
 		if err != nil {
 			return err
 		}
@@ -127,14 +107,14 @@ func (c *C) Count(filter bson.D) (int64, error) {
 
 func (c *C) RemoveAll(filter bson.D) error {
 	return c.Template(func(col *mongo.Collection) error {
-		_, err := col.DeleteMany(context.TODO(), filter)
+		_, err := col.DeleteMany(context.Background(), filter)
 		return err
 	})
 }
 
 func (c *C) UpdateAll(filter bson.D, update bson.D) error {
 	return c.Template(func(col *mongo.Collection) error {
-		_, err := col.UpdateMany(context.TODO(), filter, update)
+		_, err := col.UpdateMany(context.Background(), filter, update)
 		return err
 	})
 }

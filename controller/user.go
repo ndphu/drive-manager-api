@@ -70,8 +70,8 @@ func UserController(r *gin.RouterGroup) {
 			//val, _ := c.Get("user")
 			//user := val.(*entity.User)
 
-			//userInfo := make([]UserInfo, 0)
-			userInfo := make([]interface{}, 0)
+			userInfo := make([]UserInfo, 0)
+			//userInfo := make([]interface{}, 0)
 			//dao.User().Pipe([]bson.M{
 			//	{"$match": bson.M{"_id": user.Id}},
 			//	{"$lookup": bson.M{

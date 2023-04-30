@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/service"
@@ -9,12 +10,12 @@ import (
 )
 
 type Item struct {
-	Id      primitive.ObjectID      `json:"id" bson:"_id"`
+	Id      primitive.ObjectID `json:"id" bson:"_id"`
 	Name    string             `json:"name"`
 	Type    string             `json:"type"`
-	Owner   primitive.ObjectID      `json:"owner"`
+	Owner   primitive.ObjectID `json:"owner"`
 	File    *service.FileIndex `json:"file,omitempty" bson:"file,omitempty"`
-	Parent  primitive.ObjectID      `json:"parent,omitempty" bson:"parent,omitempty"`
+	Parent  primitive.ObjectID `json:"parent,omitempty" bson:"parent,omitempty"`
 	Deleted bool               `json:"deleted" bson:"deleted"`
 }
 
@@ -46,7 +47,7 @@ func BrowseController(r *gin.RouterGroup) {
 			item.Parent = hex
 		}
 
-		if err := dao.Item().Insert(item); err != nil {
+		if _, err := dao.Item().InsertOne(context.Background(), item); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -70,7 +71,7 @@ func BrowseController(r *gin.RouterGroup) {
 		item.Type = "folder"
 		item.Id = primitive.NewObjectID()
 
-		if err := dao.Item().Insert(item); err != nil {
+		if _, err := dao.Item().InsertOne(context.Background(), item); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -87,13 +88,17 @@ func BrowseController(r *gin.RouterGroup) {
 		}
 		if primitive.IsValidObjectID(parentId) {
 			hex, _ := primitive.ObjectIDFromHex(parentId)
-			condition.Map()["parent"] = hex
+			condition = append(condition, bson.E{Key: "parent", Value: hex})
 		} else {
-			condition.Map()["parent"] = nil
+
+			condition = append(condition, bson.E{Key: "parent", Value: nil})
 		}
 		var items []Item
 		//items := make([]Item, 0)
-		if err := dao.Item().Find(condition, &items); err != nil {
+		if cursor, err := dao.Item().Find(context.Background(), condition); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		} else if err := cursor.All(context.Background(), &items); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		} else {
@@ -111,20 +116,22 @@ func BrowseController(r *gin.RouterGroup) {
 
 		var i Item
 		itemIdHex, _ := primitive.ObjectIDFromHex(itemId)
-		if err := dao.Item().Find(bson.D{
+		if err := dao.Item().FindOne(context.Background(), bson.D{
 			{"_id", itemIdHex},
 			{"owner", u.Id},
-		}, &i); err != nil {
+		}).Decode(&i); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 		i.Deleted = true
-		// TODO
-		//hexId, _ := primitive.ObjectIDFromHex(itemId)
-		//if err := dao.Item().Update(hexId, i); err != nil {
-		//	c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
-		//	return
-		//}
+		hexId, _ := primitive.ObjectIDFromHex(itemId)
+		if _, err := dao.Item().
+			UpdateOne(context.Background(),
+				bson.D{{"_id", hexId}},
+				bson.D{{"$set", bson.D{{"deleted", true}}}}); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"success": false, "error": err.Error()})
+			return
+		}
 		c.JSON(200, gin.H{"success": true})
 	})
 }

@@ -41,7 +41,7 @@ func (s *ProjectService) CreateProject(displayName string, key []byte, numberOfA
 		return nil, err
 	}
 	// validate project ID from key file should be unique
-	if count, err := dao.Project().Count(bson.D{{"projectId", kd.ProjectId}}); err != nil {
+	if count, err := dao.Project().CountDocuments(context.Background(), bson.D{{"projectId", kd.ProjectId}}); err != nil {
 		log.Println("Fail to check key unique with database", err.Error())
 		return nil, err
 	} else if count > 0 {
@@ -202,18 +202,22 @@ func (s *ProjectService) SyncProject(projectId string, userId string) error {
 	var p entity.Project
 	projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
 	userIdHex, _ := primitive.ObjectIDFromHex(userId)
-	if err := dao.Project().FindOne(bson.D{{"_id", projectIdHex}, {"owner", userIdHex}}, &p);
+	if err := dao.Project().FindOne(context.Background(), bson.D{{"_id", projectIdHex}, {"owner", userIdHex}}).Decode(&p);
 		err != nil {
 		log.Println("Fail to find project to perform sync by error", err.Error())
 		return err
 	}
 	var accList []entity.DriveAccount
-	if err := dao.DriveAccount().Find(bson.D{
+	if cursor, err := dao.DriveAccount().Find(context.Background(), bson.D{
 		{"projectId", projectIdHex},
 		{"owner", userIdHex},
-	}, &accList); err != nil {
+	}); err != nil {
 		log.Println("Fail to get account list by error", err.Error())
 		return err
+	} else {
+		if err := cursor.All(context.Background(), &accList); err != nil {
+			return err
+		}
 	}
 
 	for _, acc := range accList {
@@ -228,7 +232,7 @@ func (s *ProjectService) SyncProject(projectId string, userId string) error {
 func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, error) {
 	var p entity.Project
 	hex, _ := primitive.ObjectIDFromHex(projectId)
-	if err := dao.Project().FindOne(bson.D{{"_id", hex}}, &p);
+	if err := dao.Project().FindOne(context.Background(), bson.D{{"_id", hex}}).Decode(&p);
 		err != nil {
 		log.Println("No project found for id", projectId)
 		return nil, err
@@ -237,10 +241,10 @@ func (s *ProjectService) ListAccounts(projectId string) ([]*iam.ServiceAccount, 
 	var key []byte
 	var admin entity.DriveAccount
 	hex_, _ := primitive.ObjectIDFromHex(projectId)
-	if err := dao.DriveAccount().FindOne(bson.D{
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{
 		{"projectId", hex_},
 		{"type", "service_account_admin"},
-	}, &admin); err != nil {
+	}).Decode(&admin); err != nil {
 		log.Println("No admin account for project", projectId)
 		key = []byte(p.AdminKey)
 	} else {
@@ -394,7 +398,7 @@ func (s *ProjectService) InsertDriveAccount(proj *entity.Project, sa *iam.Servic
 func (s *ProjectService) GetProject(id string) (*entity.Project, error) {
 	var p entity.Project
 	hex, _ := primitive.ObjectIDFromHex(id)
-	if err := dao.Project().FindId(hex, &p); err != nil {
+	if err := dao.Project().FindOne(context.Background(), bson.D{{"_id", hex}}).Decode(&p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -415,10 +419,14 @@ func (s *ProjectService) GetIamService(project *entity.Project) (*helper.IamServ
 func (s *ProjectService) SyncProjectQuota(projectId string) error {
 	var accounts []entity.DriveAccount
 	projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
-	if err := dao.DriveAccount().Find(bson.D{
+	if cursor, err := dao.DriveAccount().Find(context.Background(), bson.D{
 		{"projectId", projectIdHex},
-	}, &accounts); err != nil {
+	}); err != nil {
 		return err
+	} else {
+		if err := cursor.All(context.Background(), &accounts); err != nil {
+			return err
+		}
 	}
 	as := GetAccountService()
 	for _, account := range accounts {

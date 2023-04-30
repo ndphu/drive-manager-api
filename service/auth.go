@@ -128,7 +128,7 @@ func (s *AuthService) CreateUserWithEmail(email string, password string, display
 		Email:       u.Email,
 		Roles:       []string{"user"},
 	}
-	if err := dao.User().Insert(&user); err != nil {
+	if _, err := dao.User().InsertOne(context.Background(), user); err != nil {
 		log.Println("Fail to insert user by error", err.Error())
 		return nil, err
 	}
@@ -146,10 +146,10 @@ func (s *AuthService) LoginWithFirebaseToken(firebaseToken string) (*entity.User
 		return nil, "", err
 	}
 	var user entity.User
-	if err := dao.User().FindOne(bson.D{
+	if err := dao.User().FindOne(context.Background(), bson.D{
 		{"email", token.Claims["email"].(string)},
-	}, &user); err != nil {
-		log.Println("Fai to find user in database by error", err.Error())
+	}).Decode(&user); err != nil {
+		log.Println("Fail to find user in database by error", err.Error())
 		return nil, "", err
 	}
 
@@ -197,7 +197,7 @@ func (s *AuthService) NewServiceToken(user *entity.User) (*entity.ServiceToken, 
 		TokenId:   tokenId.String(),
 	}
 
-	if err := dao.ServiceToken().Insert(&st); err != nil {
+	if _, err := dao.ServiceToken().InsertOne(context.Background(), st); err != nil {
 		log.Println("Fail to insert service_token by error", err.Error())
 		return nil, err
 	}
