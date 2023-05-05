@@ -46,8 +46,3 @@ func FirebaseConfig() *mongo.Collection {
 	return RawCollection("firebase_config")
 }
 
-//func RunTransaction(ops []txn.Op) error {
-//	return collection("transaction", func(col *mongo.Collection) error {
-//		return txn.NewRunner(col).Run(ops, "", nil)
-//	})
-//}

@@ -68,8 +68,10 @@ func ViewController(r *gin.RouterGroup) {
 			{
 				{"$project", bson.D{
 					{"_id", 1},
+					{"projectId", 1},
 					{"displayName", 1},
 					{"accounts", 1},
+					{"owner", 1},
 				}},
 			},
 		}); err != nil {

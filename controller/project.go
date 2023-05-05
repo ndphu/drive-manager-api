@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
@@ -333,6 +334,9 @@ func queryProjectLookup(userId, projectId string) (*ProjectLookup, error) {
 	if err := cursor.All(context.Background(), &projects); err != nil {
 		return nil, err
 	} else {
+		if len(projects) == 0 {
+			return nil, errors.New("ProjectNotFound")
+		}
 		return &projects[0], nil
 	}
 }

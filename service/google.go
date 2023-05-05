@@ -26,7 +26,7 @@ type GoogleService struct {
 func (g *GoogleService) GetDownloadLink(accountId, fileId string) (*helper.DownloadDetails, error) {
 	var acc entity.DriveAccount
 	hex, _ := primitive.ObjectIDFromHex(accountId)
-	if err := dao.RawCollection("drive_account").FindOne(context.Background(), bson.D{{"_id", hex}}).Decode(&acc); err != nil {
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hex}}).Decode(&acc); err != nil {
 		log.Println("Fail to file drive account by error", err.Error())
 		return nil, err
 	}

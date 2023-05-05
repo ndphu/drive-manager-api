@@ -65,10 +65,7 @@ func AccountController(r *gin.RouterGroup) {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}
-		if err := dao.Col("file_index").Template(func(col *mongo.Collection) error {
-			_, err := col.DeleteMany(context.Background(), bson.D{{"fileId", c.Param("fileId")}})
-			return err
-		}); err != nil {
+		if _, err := dao.FileIndex().DeleteMany(context.Background(), bson.D{{"fileId", c.Param("fileId")}}); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}

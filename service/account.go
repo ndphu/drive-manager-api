@@ -192,76 +192,86 @@ func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) err
 }
 
 func (s *AccountService) UpdateKey(id string, key []byte) error {
-	//var acc entity.DriveAccount
-	//err := dao.DriveAccount().FindId(primitive.ObjectIDFromHex(id), &acc)
-	//if err != nil {
-	//	return err
-	//}
-	//err = s.InitializeKey(&acc, key)
-	//if err != nil {
-	//	return err
-	//}
-	//return dao.DriveAccount().UpdateId(primitive.ObjectIDFromHex(id), &acc)
-	// TODO
-	return nil
+	var acc entity.DriveAccount
+	hexId, _ := primitive.ObjectIDFromHex(id)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
+		return err
+	}
+	if err := s.InitializeKey(&acc, key); err != nil {
+		return err
+	}
+
+	if update, err := dao.DriveAccount().ReplaceOne(context.Background(), bson.D{{"_id", hexId}}, &acc); err != nil {
+		return err
+	} else {
+		log.Println("UpdateKey completed with ModifiedCount=", update.ModifiedCount)
+		return nil
+	}
 }
 
 func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
-	//var acc entity.DriveAccount
-	//if err := dao.DriveAccount().FindId(primitive.ObjectIDFromHex(accountId), &acc); err != nil {
-	//	return err
-	//}
-	//return s.UpdateCachedQuota(&acc)
-	// TODO
-	return nil
+	var acc entity.DriveAccount
+	hexId, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
+		return err
+	}
+	return s.UpdateCachedQuota(&acc)
 }
 
 func (s *AccountService) UpdateCachedQuotaByAccountIdAndAdditionalSize(accountId string, addedSize int64) error {
-	//var acc entity.DriveAccount
-	//if err := dao.DriveAccount().FindId(primitive.ObjectIDFromHex(accountId), &acc); err != nil {
-	//	return err
-	//}
-	////return s.UpdateCachedQuota(&acc)
-	//updatedAt := time.Now()
-	//return dao.DriveAccount().Update(
-	//	bson.M{"_id": acc.Id},
-	//	bson.M{
-	//		"$set": bson.M{
-	//			"usage":                acc.Usage + addedSize,
-	//			"available":            acc.Limit - addedSize,
-	//			"quotaUpdateTimestamp": updatedAt,
-	//		},
-	//	})
-	// TODO
+	var acc entity.DriveAccount
+	hexId, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
+		return err
+	}
+	updatedAt := time.Now()
+	if update, err := dao.DriveAccount().UpdateOne(
+		context.Background(),
+		bson.D{{"_id", hexId}},
+		bson.D{
+			{"$set", bson.D{
+				{"usage", acc.Usage + addedSize},
+				{"available", acc.Limit - addedSize},
+				{"quotaUpdateTimestamp", updatedAt},
+			}},
+		}); err != nil {
+		return err
+	} else {
+		log.Println("UpdateCachedQuotaByAccountIdAndAdditionalSize completed with ModifiedCount=", update.ModifiedCount)
+	}
 	return nil
 }
 
 func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
-	//driveService, err := helper.GetDriveService([]byte(acc.Key))
-	//if err != nil {
-	//	return err
-	//}
-	//quota, err := driveService.GetQuotaUsage()
-	//if err != nil {
-	//	return err
-	//}
-	//updatedAt := time.Now()
-	//acc.Usage = quota.Usage
-	//acc.Limit = quota.Limit
-	//acc.Available = quota.Limit - quota.Usage
-	//acc.QuotaUpdateTimestamp = updatedAt
-	//return dao.DriveAccount().Update(
-	//	bson.M{"_id": acc.Id},
-	//	bson.M{
-	//		"$set": bson.M{
-	//			"usage":                quota.Usage,
-	//			"limit":                quota.Limit,
-	//			"available":            quota.Limit - quota.Usage,
-	//			"quotaUpdateTimestamp": updatedAt,
-	//		},
-	//	})
-	// TODO
-	return nil
+	driveService, err := helper.GetDriveService([]byte(acc.Key))
+	if err != nil {
+		return err
+	}
+	quota, err := driveService.GetQuotaUsage()
+	if err != nil {
+		return err
+	}
+	updatedAt := time.Now()
+	acc.Usage = quota.Usage
+	acc.Limit = quota.Limit
+	acc.Available = quota.Limit - quota.Usage
+	acc.QuotaUpdateTimestamp = updatedAt
+	if update, err := dao.DriveAccount().UpdateOne(
+		context.Background(),
+		bson.D{{"_id", acc.Id}},
+		bson.D{
+			{"$set", bson.D{
+				{"usage", quota.Usage},
+				{"limit", quota.Limit},
+				{"available", quota.Limit - quota.Usage},
+				{"quotaUpdateTimestamp", updatedAt},
+			}},
+		}); err != nil {
+		return err
+	} else {
+		log.Println("UpdateCachedQuota completed with ModifiedCount=", update.ModifiedCount)
+		return nil
+	}
 }
 
 type FileLookup struct {

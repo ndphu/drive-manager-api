@@ -25,7 +25,7 @@ func ConfigController(r *gin.RouterGroup) {
 			c.JSON(200, gin.H{"config": fc})
 		}*/
 		fc := FirebaseConfig{}
-		if err := dao.RawCollection("firebase_config").FindOne(context.Background(), bson.D{}).Decode(&fc); err != nil {
+		if err := dao.FirebaseConfig().FindOne(context.Background(), bson.D{}).Decode(&fc); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 		} else {
 			c.JSON(200, gin.H{
