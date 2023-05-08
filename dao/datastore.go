@@ -1,16 +1,17 @@
 package dao
 
 import (
-	"crypto/tls"
+	"context"
 	"errors"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
-	"net"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"os"
+	"time"
 )
 
 type DataStore struct {
-	Session *mgo.Session
+	Client *mongo.Client
 }
 
 type C struct {
@@ -23,103 +24,12 @@ func Col(name string) *C {
 	}
 }
 
-type CollectionFunc func(col *mgo.Collection) error
-
-func collection(name string, cb CollectionFunc) error {
-	session := ds.Session.Copy()
-	defer session.Close()
-	return cb(session.DB("drive-manager").C(name))
+func RawCollection(name string) *mongo.Collection {
+	return ds.Client.Database("drive-manager").Collection(name)
 }
 
-func (c *C) Pipe(pipe []bson.M, result interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Pipe(pipe).All(result)
-	})
-}
-
-func (c *C) Insert(docs ...interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Insert(docs...)
-	})
-}
-
-func (c *C) FindId(id bson.ObjectId, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.FindId(id).One(result)
-	})
-}
-
-func (c *C) FindAll(result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(nil).All(result)
-	})
-}
-
-func (c *C) Find(filter bson.M, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(filter).All(result)
-	})
-}
-
-func (c *C) Template(cb CollectionFunc) error {
-	return collection(c.Name, cb)
-}
-
-func (c *C) PipeOne(pipe []bson.M, result interface{}) error {
-	return c.Template(func(c *mgo.Collection) error {
-		return c.Pipe(pipe).One(result)
-	})
-}
-
-func (c *C) FindOne(filter bson.M, result interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Find(filter).One(result)
-	})
-}
-
-func (c *C) UpdateId(id bson.ObjectId, e interface{}) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.UpdateId(id, e)
-	})
-}
-
-func (c *C) Update(selector bson.M, update bson.M) error {
-	return c.Template(func(col *mgo.Collection) error {
-		return col.Update(selector, update)
-	})
-}
-
-func (c *C) Count(filter bson.M) (int, error) {
-	result := 0
-	err := c.Template(func(col *mgo.Collection) error {
-		count, err := col.Find(filter).Count()
-		if err != nil {
-			return err
-		}
-		result = count
-		return nil
-	})
-	return result, err
-}
-
-func (c *C) RemoveAll(filter bson.M) (*mgo.ChangeInfo, error) {
-	var info *mgo.ChangeInfo
-	err := c.Template(func(col *mgo.Collection) error {
-		_info, err := col.RemoveAll(filter)
-		info = _info
-		return err
-	})
-	return info, err
-}
-
-func (c *C) UpdateAll(selector bson.M, update bson.M) (*mgo.ChangeInfo, error) {
-	var info *mgo.ChangeInfo
-	err := c.Template(func(col *mgo.Collection) error {
-		_info, err := col.UpdateAll(selector, update)
-		info = _info
-		return err
-	})
-	return info, err
+func RawClient() *mongo.Client {
+	return ds.Client
 }
 
 var (
@@ -137,42 +47,46 @@ func isSslEnabled() bool {
 }
 
 func Init() error {
-	var session *mgo.Session
-
 	if getMongoDbUri() == "" {
 		return ErrorEmptyMongoDbUri
 	} else {
-		if isSslEnabled() {
-			tlsConfig := &tls.Config{}
-			dialInfo, err := mgo.ParseURL(getMongoDbUri())
-			if err != nil {
-				return err
-			}
-			dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-				conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-				return conn, err
-			}
-			session, err = mgo.DialWithInfo(dialInfo)
-			if err != nil {
-				return err
-			}
-		} else {
-			//dialInfo, err := mgo.ParseURL(getMongoDbUri())
-			s, err := mgo.Dial(getMongoDbUri())
-			if err != nil {
-				return err
-			}
-			session = s
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_client, err := mongo.Connect(ctx, options.Client().ApplyURI(getMongoDbUri()))
+		if err != nil {
+			panic(err)
 		}
-	}
-	ds = &DataStore{
-		Session: session,
+		ds = &DataStore{
+			Client: _client,
+		}
 	}
 	return nil
 }
 
 func Close() {
-	if ds != nil && ds.Session != nil {
-		ds.Session.Close()
+	//if ds != nil && ds.Session != nil {
+	//	ds.Session.Close()
+	//}
+}
+
+func Disconnect() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := ds.Client.Disconnect(ctx); err != nil {
+		panic(err)
 	}
+}
+
+type TransactionCallback func(sessCtx mongo.SessionContext) (interface{}, error)
+
+func ExecTransaction(cb TransactionCallback) (interface{}, error) {
+	wc := writeconcern.New(writeconcern.WMajority())
+	txnOptions := options.Transaction().SetWriteConcern(wc)
+	session, err := RawClient().StartSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.EndSession(context.Background())
+	return session.WithTransaction(context.Background(), cb, txnOptions)
+
 }

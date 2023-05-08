@@ -1,14 +1,14 @@
 package entity
 
 import (
-	"github.com/globalsign/mgo/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 )
 
 type ServiceToken struct {
-	Id        bson.ObjectId `json:"id" bson:"_id"`
+	Id        primitive.ObjectID `json:"id" bson:"_id"`
 	CreatedAt time.Time     `json:"createdAt" bson:"createdAt"`
-	UserId    bson.ObjectId `json:"userId" bson:"userId"`
+	UserId    primitive.ObjectID `json:"userId" bson:"userId"`
 	Token     string        `json:"token" bson:"token"`
 	TokenId   string        `json:"tokenId" bson:"tokenId"`
 }

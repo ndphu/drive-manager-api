@@ -1,13 +1,16 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/helper"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"google.golang.org/api/drive/v3"
 	"log"
 	"strconv"
@@ -27,82 +30,115 @@ type KeyDetails struct {
 }
 
 func (s *AccountService) Save(account *entity.DriveAccount) error {
-	account.Id = bson.NewObjectId()
-	return dao.DriveAccount().Insert(account)
+	account.Id = primitive.NewObjectID()
+	if _, err := dao.DriveAccount().InsertOne(context.Background(), account); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *AccountService) FindAll() ([]*entity.DriveAccount, error) {
-	var list []*entity.DriveAccount
-	err := dao.DriveAccount().FindAll(&list)
-	return list, err
+	if result, err := dao.RawCollection("drive_account").Find(context.Background(), bson.D{}); err != nil {
+		return nil, err
+	} else {
+		var accounts []*entity.DriveAccount
+		if err := result.All(context.Background(), &accounts); err != nil {
+			return nil, err
+		} else {
+			return accounts, nil
+		}
+	}
 }
 
-func (s *AccountService) FindAllByOwner(owner bson.ObjectId) ([]*entity.DriveAccount, error) {
+func (s *AccountService) FindAllByOwner(owner primitive.ObjectID) ([]*entity.DriveAccount, error) {
 	var list []*entity.DriveAccount
-	err := dao.DriveAccount().Find(bson.M{"owner": owner}, &list)
-	return list, err
+	if cursor, err := dao.DriveAccount().Find(context.Background(), bson.D{{"owner", owner}}); err != nil {
+		return nil, err
+	} else {
+		if err := cursor.All(context.Background(), &list); err != nil {
+			return nil, err
+		}
+	}
+	return list, nil
+
 }
 
 func (s *AccountService) FindAccounts(page int, size int, includeKey bool, owner string) ([]*entity.DriveAccount, bool, error) {
 	var list []*entity.DriveAccount
-	err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
-		return col.Find(bson.M{"owner": bson.ObjectIdHex(owner)}).
-			Select(bson.M{"key": includeKey}).
-			Sort("name").
-			Skip((page - 1) * size).
-			Limit(size + 1).
-			All(&list)
-	})
-	hasMore := false
-	if len(list) == size+1 {
-		hasMore = true
-		list = list[:len(list)-1]
+	findOptions := options.Find()
+	findOptions.SetLimit(int64(size + 1))
+	findOptions.SetSkip(int64((page - 1) * size))
+	findOptions.SetSort(bson.D{{"name", 1}})
+	findOptions.SetProjection(bson.D{{"key", includeKey}})
+	ownerHex, _ := primitive.ObjectIDFromHex(owner)
+	if cursor, err := dao.DriveAccount().Find(context.Background(), bson.D{{"owner", ownerHex}}, findOptions); err != nil {
+		return nil, false, err
+	} else {
+		if err := cursor.All(context.Background(), &list); err != nil {
+			return nil, false, err
+		} else {
+			hasMore := false
+			if len(list) == size+1 {
+				hasMore = true
+				list = list[:len(list)-1]
+			}
+			return list, hasMore, err
+		}
 	}
-	return list, hasMore, err
 }
 
 type AccountLookup struct {
-	Id          bson.ObjectId  `json:"id" bson:"_id"`
-	Name        string         `json:"name" bson:"name"`
-	Desc        string         `json:"desc" bson:"desc"`
-	Type        string         `json:"type" bson:"type"`
-	Key         string         `json:"-" bson:"key"`
-	ClientEmail string         `json:"clientEmail" bson:"clientEmail"`
-	ClientId    string         `json:"clientId" bson:"clientId"`
-	Usage       int64          `json:"usage" bson:"usage"`
-	Limit       int64          `json:"limit" bson:"limit"`
-	Project     entity.Project `json:"project" bson:"project"`
-	Files       []*helper.File `json:"files"`
+	Id          primitive.ObjectID `json:"id" bson:"_id"`
+	Name        string             `json:"name" bson:"name"`
+	Desc        string             `json:"desc" bson:"desc"`
+	Type        string             `json:"type" bson:"type"`
+	Key         string             `json:"-" bson:"key"`
+	ClientEmail string             `json:"clientEmail" bson:"clientEmail"`
+	ClientId    string             `json:"clientId" bson:"clientId"`
+	Usage       int64              `json:"usage" bson:"usage"`
+	Limit       int64              `json:"limit" bson:"limit"`
+	Project     entity.Project     `json:"project" bson:"project"`
+	Files       []*helper.File     `json:"files"`
 }
 
 func (s *AccountService) FindAccountLookup(id string, userId string) (*AccountLookup, error) {
-	var acc AccountLookup
-	err := dao.DriveAccount().PipeOne([]bson.M{
-		{"$match": bson.M{
-			"_id":   bson.ObjectIdHex(id),
-			"owner": bson.ObjectIdHex(userId),
-		}},
-		{"$lookup": bson.M{
-			"from":         "project",
-			"localField":   "projectId",
-			"foreignField": "_id",
-			"as":           "projects",
-		}},
-		{"$addFields": bson.M{
-			"project": bson.M{
-				"$arrayElemAt": []interface{}{"$projects", 0},
-			},
-		}},
+	var accs []AccountLookup
+	hexId, _ := primitive.ObjectIDFromHex(id)
+	hexUserId, _ := primitive.ObjectIDFromHex(userId)
+	if cursor, err := dao.DriveAccount().Aggregate(context.Background(), mongo.Pipeline{
 		{
-			"$project": bson.M{
-				"projects": 0,
-			},
+			{"$match", bson.D{
+				{"_id", hexId},
+				{"owner", hexUserId},
+			}},
 		},
-	}, &acc)
-	if err != nil {
+		{
+			{"$lookup", bson.D{
+				{"from", "project"},
+				{"localField", "projectId"},
+				{"foreignField", "_id"},
+				{"as", "projects"},
+			}}},
+		{
+			{"$addFields", bson.D{
+				{"project", bson.D{
+					{"$arrayElemAt", []interface{}{"$projects", 0}},
+				}},
+			}},
+		},
+		{
+			{
+				"$project", bson.D{
+				{"projects", 0},
+			}},
+		},
+	}); err != nil {
+		return nil, err
+	} else if err := cursor.All(context.Background(), &accs); err != nil {
 		return nil, err
 	}
 
+	acc := accs[0]
 	srv, err := helper.GetDriveService([]byte(acc.Key))
 	if err != nil {
 		return nil, err
@@ -120,18 +156,25 @@ func (s *AccountService) FindAccountLookup(id string, userId string) (*AccountLo
 }
 
 func (s *AccountService) FindAccount(id string) (*entity.DriveAccount, error) {
-	var acc entity.DriveAccount
-	err := dao.DriveAccount().FindId(bson.ObjectIdHex(id), &acc)
-	return &acc, err
+	hex, _ := primitive.ObjectIDFromHex(id)
+	var res entity.DriveAccount
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{
+		{"_id", hex},
+	}).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-func (s *AccountService) FindAccountById(id bson.ObjectId, owner bson.ObjectId) (*entity.DriveAccount, error) {
-	var acc entity.DriveAccount
-	err := dao.DriveAccount().FindOne(bson.M{
-		"_id":   id,
-		"owner": owner,
-	}, &acc)
-	return &acc, err
+func (s *AccountService) FindAccountById(id primitive.ObjectID, owner primitive.ObjectID) (*entity.DriveAccount, error) {
+	var res entity.DriveAccount
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{
+		{"_id", id},
+		{"owner", owner},
+	}).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) error {
@@ -150,20 +193,26 @@ func (s *AccountService) InitializeKey(acc *entity.DriveAccount, key []byte) err
 
 func (s *AccountService) UpdateKey(id string, key []byte) error {
 	var acc entity.DriveAccount
-	err := dao.DriveAccount().FindId(bson.ObjectIdHex(id), &acc)
-	if err != nil {
+	hexId, _ := primitive.ObjectIDFromHex(id)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
 		return err
 	}
-	err = s.InitializeKey(&acc, key)
-	if err != nil {
+	if err := s.InitializeKey(&acc, key); err != nil {
 		return err
 	}
-	return dao.DriveAccount().UpdateId(bson.ObjectIdHex(id), &acc)
+
+	if update, err := dao.DriveAccount().ReplaceOne(context.Background(), bson.D{{"_id", hexId}}, &acc); err != nil {
+		return err
+	} else {
+		log.Println("UpdateKey completed with ModifiedCount=", update.ModifiedCount)
+		return nil
+	}
 }
 
 func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	hexId, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
 		return err
 	}
 	return s.UpdateCachedQuota(&acc)
@@ -171,20 +220,26 @@ func (s *AccountService) UpdateCachedQuotaByAccountId(accountId string) error {
 
 func (s *AccountService) UpdateCachedQuotaByAccountIdAndAdditionalSize(accountId string, addedSize int64) error {
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	hexId, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", hexId}}).Decode(&acc); err != nil {
 		return err
 	}
-	//return s.UpdateCachedQuota(&acc)
 	updatedAt := time.Now()
-	return dao.DriveAccount().Update(
-		bson.M{"_id": acc.Id},
-		bson.M{
-			"$set": bson.M{
-				"usage":                acc.Usage + addedSize,
-				"available":            acc.Limit - addedSize,
-				"quotaUpdateTimestamp": updatedAt,
-			},
-		})
+	if update, err := dao.DriveAccount().UpdateOne(
+		context.Background(),
+		bson.D{{"_id", hexId}},
+		bson.D{
+			{"$set", bson.D{
+				{"usage", acc.Usage + addedSize},
+				{"available", acc.Limit - addedSize},
+				{"quotaUpdateTimestamp", updatedAt},
+			}},
+		}); err != nil {
+		return err
+	} else {
+		log.Println("UpdateCachedQuotaByAccountIdAndAdditionalSize completed with ModifiedCount=", update.ModifiedCount)
+	}
+	return nil
 }
 
 func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
@@ -201,49 +256,60 @@ func (s *AccountService) UpdateCachedQuota(acc *entity.DriveAccount) error {
 	acc.Limit = quota.Limit
 	acc.Available = quota.Limit - quota.Usage
 	acc.QuotaUpdateTimestamp = updatedAt
-	return dao.DriveAccount().Update(
-		bson.M{"_id": acc.Id},
-		bson.M{
-			"$set": bson.M{
-				"usage":                quota.Usage,
-				"limit":                quota.Limit,
-				"available":            quota.Limit - quota.Usage,
-				"quotaUpdateTimestamp": updatedAt,
-			},
-		})
+	if update, err := dao.DriveAccount().UpdateOne(
+		context.Background(),
+		bson.D{{"_id", acc.Id}},
+		bson.D{
+			{"$set", bson.D{
+				{"usage", quota.Usage},
+				{"limit", quota.Limit},
+				{"available", quota.Limit - quota.Usage},
+				{"quotaUpdateTimestamp", updatedAt},
+			}},
+		}); err != nil {
+		return err
+	} else {
+		log.Println("UpdateCachedQuota completed with ModifiedCount=", update.ModifiedCount)
+		return nil
+	}
 }
 
 type FileLookup struct {
-	Id      bson.ObjectId         `json:"_id" bson:"_id"`
+	Id      primitive.ObjectID    `json:"_id" bson:"_id"`
 	DriveId string                `json:"driveId" bson:"driveId"`
 	Name    string                `json:"name" bson:"name"`
 	Account []entity.DriveAccount `json:"account" bson:"account"`
 }
 
 type FileAggregateResult struct {
-	Id         bson.ObjectId `json:"_id" bson:"_id"`
-	DriveId    string        `json:"driveId" bson:"driveId"`
-	Name       string        `json:"name" bson:"name"`
-	AccountKey string        `json:"accountKey" bson:"accountKey"`
+	Id         primitive.ObjectID `json:"_id" bson:"_id"`
+	DriveId    string             `json:"driveId" bson:"driveId"`
+	Name       string             `json:"name" bson:"name"`
+	AccountKey string             `json:"accountKey" bson:"accountKey"`
 }
 
 func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *helper.DownloadDetails, error) {
 	res := FileAggregateResult{}
-	if err := dao.File().Pipe([]bson.M{
-		{"$match": bson.M{"_id": bson.ObjectIdHex(fileId)}},
-		{"$lookup": bson.M{
-			"from":         "drive_account",
-			"localField":   "driveAccount",
-			"foreignField": "_id",
-			"as":           "accounts",
+	fileIdHex, _ := primitive.ObjectIDFromHex(fileId)
+	cursor, err := dao.RawCollection("file").Aggregate(context.Background(), bson.D{
+		{"$match", bson.D{{"_id", fileIdHex}}},
+		{"$lookup", bson.D{
+			{"from", "drive_account"},
+			{"localField", "driveAccount"},
+			{"foreignField", "_id"},
+			{"as", "accounts"},
 		}},
-		{"$unwind": bson.M{"path": "$accounts"}},
-		{"$project": bson.M{
-			"driveId":    1,
-			"name":       1,
-			"accountKey": "$account.key",
+		{"$unwind", bson.D{{"path", "$accounts"}}},
+		{"$project", bson.D{
+			{"driveId", 1},
+			{"name", 1},
+			{"accountKey", "$account.key"},
 		}},
-	}, &res); err != nil {
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := cursor.Decode(&res); err != nil {
 		return nil, nil, err
 	}
 	srv, err := helper.GetDriveService([]byte(res.AccountKey))
@@ -259,7 +325,7 @@ func (s *AccountService) GetDownloadLinkByFileId(fileId string) (*drive.File, *h
 }
 
 //
-//func getDriveService(driveId bson.ObjectId) (*helper.DriveService, error) {
+//func getDriveService(driveId primitive.ObjectID) (*helper.DriveService, error) {
 //	acc := entity.DriveAccount{}
 //	if err := ; err != nil {
 //		return nil, err
@@ -301,7 +367,7 @@ func (s *AccountService) UpdateAllAccountQuota() error {
 	return nil
 }
 
-func (s *AccountService) UpdateAccountQuotaByOwner(owner bson.ObjectId) error {
+func (s *AccountService) UpdateAccountQuotaByOwner(owner primitive.ObjectID) error {
 	log.Println("Updating account quota for user", owner.Hex())
 	all, err := s.FindAllByOwner(owner)
 	if err != nil {
@@ -328,8 +394,8 @@ func GetAccountService() *AccountService {
 	return accountService
 }
 
-func (s *AccountService) GetAccountCount() int {
-	n, _ := dao.DriveAccount().Count(nil)
+func (s *AccountService) GetAccountCount() int64 {
+	n, _ := dao.RawCollection("drive_account").CountDocuments(context.Background(), nil)
 	return n
 }
 func (s *AccountService) GetAccessToken(acc *entity.DriveAccount) (string, error) {
@@ -370,8 +436,10 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 		log.Println("Fail to generate service account key file by error", err.Error())
 		return nil, err
 	}
+	userIdHex, _ := primitive.ObjectIDFromHex(userId)
+	projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
 	acc := &entity.DriveAccount{
-		Id:                   bson.NewObjectId(),
+		Id:                   primitive.NewObjectID(),
 		Name:                 serviceAccountId,
 		Desc:                 account.DisplayName,
 		Type:                 "service_account",
@@ -380,12 +448,12 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 		Key:                  string(saKey),
 		Usage:                0,
 		Limit:                0,
-		Owner:                bson.ObjectIdHex(userId),
-		ProjectId:            bson.ObjectIdHex(projectId),
+		Owner:                userIdHex,
+		ProjectId:            projectIdHex,
 		QuotaUpdateTimestamp: time.Time{},
 	}
 
-	if err := dao.DriveAccount().Insert(acc); err != nil {
+	if _, err := dao.DriveAccount().InsertOne(context.Background(), acc); err != nil {
 		return nil, err
 	}
 
@@ -396,12 +464,13 @@ func (s *AccountService) CreateServiceAccount(projectId string, userId string) (
 
 func (s *AccountService) FindAdminAccount(projectId string) (*entity.DriveAccount, error) {
 	var admin entity.DriveAccount
-	if err := dao.DriveAccount().FindOne(bson.M{
-		"projectId": bson.ObjectIdHex(projectId),
-		"type":      "service_account_admin",
-	}, &admin); err != nil {
+	projectIdHex, _ := primitive.ObjectIDFromHex(projectId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{
+		{"projectId", projectIdHex},
+		{"type", "service_account_admin"},
+	}).Decode(&admin); err != nil {
 		var project entity.Project
-		if err := dao.Project().FindId(bson.ObjectIdHex(projectId), &project); err != nil {
+		if err := dao.Project().FindOne(context.Background(), bson.D{{"_id", projectIdHex}}).Decode(&project); err != nil {
 			return nil, err
 		}
 
@@ -417,7 +486,7 @@ func migrateAdminAccount(project entity.Project) (*entity.DriveAccount, error) {
 	if err := json.Unmarshal([]byte(project.AdminKey), &kd); err != nil {
 		return nil, err
 	}
-	accountId := bson.NewObjectId()
+	accountId := primitive.NewObjectID()
 	acc := entity.DriveAccount{
 		Id:          accountId,
 		ProjectId:   project.Id,
@@ -430,24 +499,24 @@ func migrateAdminAccount(project entity.Project) (*entity.DriveAccount, error) {
 		Owner:       project.Owner,
 	}
 
-	if err := dao.DriveAccount().Insert(&acc); err != nil {
+	if _, err := dao.DriveAccount().InsertOne(context.Background(), acc); err != nil {
 		return nil, err
 	}
 	return &acc, nil
 }
 
 type FileIndex struct {
-	Id           bson.ObjectId `json:"id" bson:"_id"`
-	FileId       string        `json:"fileId" bson:"fileId"`
-	Name         string        `json:"name" bson:"name"`
-	Size         int64         `json:"size" bson:"size"`
-	MimeType     string        `json:"mimeType" bson:"mimeType"`
-	AccountId    bson.ObjectId `json:"accountId" bson:"accountId"`
-	Owner        bson.ObjectId `json:"owner" bson:"owner"`
-	ProjectId    bson.ObjectId `json:"projectId" bson:"projectId"`
-	CreatedTime  time.Time     `json:"createdTime" bson:"createdTime"`
-	ModifiedTime time.Time     `json:"modifiedTime" bson:"modifiedTime"`
-	SyncTime     time.Time     `json:"syncTime" bson:"syncTime"`
+	Id           primitive.ObjectID `json:"id" bson:"_id"`
+	FileId       string             `json:"fileId" bson:"fileId"`
+	Name         string             `json:"name" bson:"name"`
+	Size         int64              `json:"size" bson:"size"`
+	MimeType     string             `json:"mimeType" bson:"mimeType"`
+	AccountId    primitive.ObjectID `json:"accountId" bson:"accountId"`
+	Owner        primitive.ObjectID `json:"owner" bson:"owner"`
+	ProjectId    primitive.ObjectID `json:"projectId" bson:"projectId"`
+	CreatedTime  time.Time          `json:"createdTime" bson:"createdTime"`
+	ModifiedTime time.Time          `json:"modifiedTime" bson:"modifiedTime"`
+	SyncTime     time.Time          `json:"syncTime" bson:"syncTime"`
 }
 
 func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
@@ -457,8 +526,8 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 		return err
 	}
 
-	if _, err := dao.DriveAccount().RemoveAll(bson.M{
-		"accountId": acc.Id,
+	if _, err := dao.RawCollection("drive_account").DeleteMany(context.Background(), bson.D{
+		{"accountId", acc.Id},
 	}); err != nil {
 		log.Println("Fail to remove old files index")
 	}
@@ -478,7 +547,7 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 			mt, _ := time.Parse("2006-01-02T15:04:05Z", file.ModifiedTime)
 
 			f := FileIndex{
-				Id:           bson.NewObjectId(),
+				Id:           primitive.NewObjectID(),
 				FileId:       file.Id,
 				Name:         file.Name,
 				Size:         file.Size,
@@ -490,7 +559,7 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 				ModifiedTime: mt,
 				SyncTime:     time.Now(),
 			}
-			if err := dao.FileIndex().Insert(f); err != nil {
+			if _, err := dao.FileIndex().InsertOne(context.Background(), f); err != nil {
 				log.Println("Fail to insert file index")
 				return err
 			}
@@ -507,26 +576,27 @@ func (s *AccountService) IndexAccountFiles(acc entity.DriveAccount) error {
 }
 
 type FileFavorite struct {
-	Id     bson.ObjectId `json:"id" bson:"_id"`
-	FileId string        `json:"fileId" bson:"fileId"`
-	UserId bson.ObjectId `json:"userId" bson:"userId"`
+	Id     primitive.ObjectID `json:"id" bson:"_id"`
+	FileId string             `json:"fileId" bson:"fileId"`
+	UserId primitive.ObjectID `json:"userId" bson:"userId"`
 }
 
 func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favorite bool) (*FileFavorite, error) {
 	var existing FileFavorite
-	if err := dao.FileFavorite().FindOne(bson.M{
-		"fileId": fileId,
-		"userId": bson.ObjectIdHex(userId),
-	}, &existing); err == nil {
+	userIdHex, _ := primitive.ObjectIDFromHex(userId)
+	if err := dao.FileFavorite().FindOne(context.Background(), bson.D{
+		{"fileId", fileId},
+		{"userId", userIdHex},
+	}).Decode(&existing); err == nil {
 		return &existing, nil
 	}
 
 	fv := FileFavorite{
-		Id:     bson.NewObjectId(),
-		UserId: bson.ObjectIdHex(userId),
+		Id:     primitive.NewObjectID(),
+		UserId: userIdHex,
 		FileId: fileId,
 	}
-	if err := dao.FileFavorite().Insert(fv); err != nil {
+	if _, err := dao.FileFavorite().InsertOne(context.Background(), fv); err != nil {
 		return nil, err
 	}
 	return &fv, nil
@@ -534,14 +604,15 @@ func (s *AccountService) SetFileFavorite(userId, accountId, fileId string, favor
 
 func (s *AccountService) SyncFile(userId string, accountId string, cloudFile drive.File) (*FileIndex, error) {
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	accountIdHex, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", accountIdHex}}).Decode(&acc); err != nil {
 		log.Println("SyncFile", "failed by error", err.Error())
 		return nil, err
 	}
 	ct, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.CreatedTime)
 	mt, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.ModifiedTime)
 	f := FileIndex{
-		Id:           bson.NewObjectId(),
+		Id:           primitive.NewObjectID(),
 		FileId:       cloudFile.Id,
 		Name:         cloudFile.Name,
 		Size:         cloudFile.Size,
@@ -553,7 +624,7 @@ func (s *AccountService) SyncFile(userId string, accountId string, cloudFile dri
 		ModifiedTime: mt,
 		SyncTime:     time.Now(),
 	}
-	if err := dao.FileIndex().Insert(f); err != nil {
+	if _, err := dao.FileIndex().InsertOne(context.Background(), f); err != nil {
 		log.Println("SyncFile", "Fail to insert file index by error", err.Error())
 		return nil, err
 	}
@@ -562,16 +633,21 @@ func (s *AccountService) SyncFile(userId string, accountId string, cloudFile dri
 
 func (s *AccountService) SyncFileById(userId string, accountId string, fileId string) (*FileIndex, error) {
 	var existing []FileIndex
-	if err := dao.FileIndex().Find(bson.M{"fileId": fileId}, &existing); err != nil {
+	if cursor, err := dao.FileIndex().Find(context.Background(), bson.D{{"fileId", fileId}}); err != nil {
 		log.Println("SyncFileById", "Fail to query if file already sync", err.Error())
 		return nil, err
+	} else {
+		if err := cursor.All(context.Background(), &existing); err != nil {
+			return nil, err
+		}
 	}
 	if len(existing) > 0 {
 		log.Println("File already synchronized")
 		return &existing[0], nil
 	}
 	var acc entity.DriveAccount
-	if err := dao.DriveAccount().FindId(bson.ObjectIdHex(accountId), &acc); err != nil {
+	accountIdHex, _ := primitive.ObjectIDFromHex(accountId)
+	if err := dao.DriveAccount().FindOne(context.Background(), bson.D{{"_id", accountIdHex}}).Decode(&acc); err != nil {
 		log.Println("SyncFileById", "failed by error", err.Error())
 		return nil, err
 	}
@@ -588,7 +664,7 @@ func (s *AccountService) SyncFileById(userId string, accountId string, fileId st
 	ct, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.CreatedTime)
 	mt, _ := time.Parse("2006-01-02T15:04:05Z", cloudFile.ModifiedTime)
 	f := FileIndex{
-		Id:           bson.NewObjectId(),
+		Id:           primitive.NewObjectID(),
 		FileId:       cloudFile.Id,
 		Name:         cloudFile.Name,
 		Size:         cloudFile.Size,
@@ -600,7 +676,7 @@ func (s *AccountService) SyncFileById(userId string, accountId string, fileId st
 		ModifiedTime: mt,
 		SyncTime:     time.Now(),
 	}
-	if err := dao.FileIndex().Insert(f); err != nil {
+	if _, err := dao.FileIndex().InsertOne(context.Background(), f); err != nil {
 		log.Println("SyncFileById", "Fail to insert file index by error", err.Error())
 		return nil, err
 	}

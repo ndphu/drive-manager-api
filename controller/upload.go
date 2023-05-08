@@ -1,12 +1,13 @@
 package controller
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/service"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type FileUploadRequest struct {
@@ -32,29 +33,29 @@ func UploadController(r *gin.RouterGroup) {
 		}
 		var accounts []entity.DriveAccount
 		uploadBuffer := int64(3221223823) // 3GB
-		if err := dao.DriveAccount().Template(func(col *mgo.Collection) error {
-			return col.Pipe([]bson.M{
-				{
-					"$match": bson.M{
-
-						"owner":     user.Id,
-						"type":      "service_account",
-						"disabled":  bson.M{"$ne": true},
-						"available": bson.M{"$gt": ur.Size + uploadBuffer},
-					},
+		if cursor, err := dao.DriveAccount().Aggregate(context.Background(), mongo.Pipeline{
+			{
+				{"$match", bson.D{
+					{"owner", user.Id},
+					{"type", "service_account"},
+					{"disabled", bson.D{{"$ne", true}}},
+					{"available", bson.D{{"$gt", ur.Size + uploadBuffer}}},
 				},
-				{"$sample": bson.M{"size": 1}},
-				{
-					"$project": bson.M{
-						"_id":       1,
-						"key":       1,
-						"projectId": 1,
-						"usage":     1,
-						"available": 1,
-						"limit":     1,
-					},
-				}}).All(&accounts)
-		}); err != nil {
+				}},
+			{{"$sample", bson.D{{"size", 1}}}},
+			{{
+				"$project", bson.D{
+					{"_id", 1},
+					{"key", 1},
+					{"projectId", 1},
+					{"usage", 1},
+					{"available", 1},
+					{"limit", 1},
+				},
+			}}}); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			return
+		} else if err := cursor.All(context.Background(), &accounts); err != nil {
 			c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			return
 		}

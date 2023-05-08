@@ -1,56 +1,48 @@
 package dao
 
-import (
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/txn"
-)
+import "go.mongodb.org/mongo-driver/mongo"
 
-func DriveAccount() *C {
-	return Col("drive_account")
+func DriveAccount() *mongo.Collection {
+	return RawCollection("drive_account")
 }
 
-func File() *C {
-	return Col("file")
+func File() *mongo.Collection {
+	return RawCollection("file")
 }
 
-func FileFavorite() *C {
-	return Col("file_favorite")
+func FileFavorite() *mongo.Collection {
+	return RawCollection("file_favorite")
 }
 
-func FileIndex() *C {
-	return Col("file_index")
+func FileIndex() *mongo.Collection {
+	return RawCollection("file_index")
 }
 
-func FirebaseAdmin() *C {
-	return Col("firebase_admin")
+func FirebaseAdmin() *mongo.Collection {
+	return RawCollection("firebase_admin")
 }
 
-func User() *C {
-	return Col("user")
+func User() *mongo.Collection {
+	return RawCollection("user")
 }
 
-func ServiceToken() *C {
-	return Col("service_token")
+func ServiceToken() *mongo.Collection {
+	return RawCollection("service_token")
 }
 
-func ServiceAccountAdmin() *C {
-	return Col("service_account_admin")
+func ServiceAccountAdmin() *mongo.Collection {
+	return RawCollection("service_account_admin")
 }
 
-func Project() *C {
-	return Col("project")
+func Project() *mongo.Collection {
+	return RawCollection("project")
 }
 
-func Item() *C {
-	return Col("item")
+func Item() *mongo.Collection {
+	return RawCollection("item")
 }
 
-func FirebaseConfig() *C {
-	return Col("firebase_config")
+func FirebaseConfig() *mongo.Collection {
+	return RawCollection("firebase_config")
 }
 
-func RunTransaction(ops []txn.Op) error {
-	return collection("transaction", func(col *mgo.Collection) error {
-		return txn.NewRunner(col).Run(ops, "", nil)
-	})
-}

@@ -1,13 +1,16 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
 	"github.com/gin-gonic/gin"
-	"github.com/globalsign/mgo/bson"
 	"github.com/ndphu/drive-manager-api/dao"
 	"github.com/ndphu/drive-manager-api/entity"
 	"github.com/ndphu/drive-manager-api/middleware"
 	"github.com/ndphu/drive-manager-api/service"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/api/iam/v1"
 )
 
@@ -22,7 +25,7 @@ type LoginWithFirebase struct {
 }
 
 type UserInfo struct {
-	Id            bson.ObjectId `json:"id" bson:"_id"`
+	Id            primitive.ObjectID `json:"id" bson:"_id"`
 	Email         string        `json:"email" bson:"email"`
 	Roles         []string      `json:"roles" bson:"roles"`
 	DisplayName   string        `json:"displayName" bson:"displayName"`
@@ -71,39 +74,44 @@ func UserController(r *gin.RouterGroup) {
 			val, _ := c.Get("user")
 			user := val.(*entity.User)
 
-			//userInfo := make([]UserInfo, 0)
-			userInfo := make([]interface{}, 0)
-			dao.User().Pipe([]bson.M{
-				{"$match": bson.M{"_id": user.Id}},
-				{"$lookup": bson.M{
-					"from":         "service_account_admin",
-					"localField":   "_id",
-					"foreignField": "userId",
-					"as":           "adminKeys",
-				}},
-				{"$lookup": bson.M{
-					"from":         "drive_account",
-					"localField":   "_id",
-					"foreignField": "owner",
-					"as":           "accounts",
-				}},
-				{"$lookup": bson.M{
-					"from":         "service_token",
-					"localField":   "_id",
-					"foreignField": "userId",
-					"as":           "serviceTokens",
-				}},
-				{"$project": bson.M{
-					"_id":           1,
-					"email":         1,
-					"displayName":   1,
-					"roles":         1,
-					"serviceTokens": 1,
-					"noOfAdminKeys": bson.M{"$size": "$adminKeys"},
-					"noOfAccounts":  bson.M{"$size": "$accounts"},
-				}},
-			}, &userInfo)
-
+			userInfo := make([]UserInfo, 0)
+			//userInfo := make([]interface{}, 0)
+			if cursor, err := dao.User().Aggregate(context.Background(), mongo.Pipeline{
+				{{"$match", bson.D{{"_id", user.Id}}}},
+				{{"$lookup", bson.D{
+					{"from", "service_account_admin"},
+					{"localField", "_id"},
+					{"foreignField", "userId"},
+					{"as", "adminKeys"},
+				}}},
+				{{"$lookup", bson.D{
+					{"from", "drive_account"},
+					{"localField", "_id"},
+					{"foreignField", "owner"},
+					{"as", "accounts"},
+				}}},
+				{{"$lookup", bson.D{
+					{"from", "service_token"},
+					{"localField", "_id"},
+					{"foreignField", "userId"},
+					{"as", "serviceTokens"},
+				}}},
+				{{"$project", bson.D{
+					{"_id", 1},
+					{"email", 1},
+					{"displayName", 1},
+					{"roles", 1},
+					{"serviceTokens", 1},
+					{"noOfAdminKeys", bson.D{{"$size", "$adminKeys"}}},
+					{"noOfAccounts", bson.D{{"$size", "$accounts"}}},
+				}}},
+			}); err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			} else if err := cursor.All(context.Background(), &userInfo); err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
 			c.JSON(200, userInfo[0])
 		})
 
